@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Membros — Daily Stand-up Bot</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .users-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .user-card {
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      transition: border-color 0.15s;
+      position: relative;
+    }
+
+    .user-card:hover { border-color: #5865f2; }
+
+    .user-card img {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      border: 2px solid #5865f2;
+      flex-shrink: 0;
+    }
+
+    .user-card-info { flex: 1; min-width: 0; }
+    .user-card-info strong { color: #fff; display: block; font-size: 0.95rem; }
+    .user-card-info span {
+      color: #6b7280;
+      font-size: 0.78rem;
+      display: block;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .badge-active {
+      font-size: 0.7rem;
+      background: #0f4620;
+      color: #4ade80;
+      border: 1px solid #22c55e;
+      border-radius: 4px;
+      padding: 2px 7px;
+      margin-top: 5px;
+      display: inline-block;
+    }
+
+    .badge-inactive {
+      font-size: 0.7rem;
+      background: #3d1515;
+      color: #f87171;
+      border: 1px solid #7b2020;
+      border-radius: 4px;
+      padding: 2px 7px;
+      margin-top: 5px;
+      display: inline-block;
+    }
+
+    .btn-remove {
+      background: none;
+      border: 1px solid #7b2020;
+      color: #f87171;
+      width: 30px;
+      height: 30px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+
+    .btn-remove:hover { background: #3d1515; }
+
+    .confirm-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .confirm-overlay.visible { display: flex; }
+
+    .confirm-box {
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 12px;
+      padding: 32px;
+      max-width: 380px;
+      width: 90%;
+      text-align: center;
+    }
+
+    .confirm-box h3 { color: #fff; margin-bottom: 8px; }
+    .confirm-box p { color: #8892a4; font-size: 0.9rem; margin-bottom: 24px; }
+
+    .confirm-actions { display: flex; gap: 12px; justify-content: center; }
+
+    .btn-confirm-remove {
+      background: #dc2626;
+      color: #fff;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+    .btn-confirm-remove:hover { background: #b91c1c; }
+
+    .btn-cancel {
+      background: #0f3460;
+      color: #c9d1d9;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-cancel:hover { background: #1e3a5f; }
+  </style>
+</head>
+<body data-page="users">
+
+  <nav>
+    <a href="dashboard.html" class="nav-brand">📋 Daily Bot</a>
+    <div class="nav-links">
+      <a href="dashboard.html">Dashboard</a>
+      <a href="me.html">Minha Daily</a>
+      <a href="register.html">Registrar</a>
+      <a href="users.html" class="active">Membros</a>
+    </div>
+    <div class="nav-actions">
+      <a href="index.html" class="btn-logout" onclick="sessionStorage.removeItem('dailybot_auth'); return true;">Sair ✕</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <h1>Membros Registrados</h1>
+    <p class="page-subtitle" id="subtitle">Carregando...</p>
+
+    <div id="content"></div>
+  </div>
+
+  <!-- Modal de confirmação -->
+  <div class="confirm-overlay" id="confirm-overlay">
+    <div class="confirm-box">
+      <h3>Remover membro?</h3>
+      <p id="confirm-msg">Este membro não receberá mais as dailies automáticas.</p>
+      <div class="confirm-actions">
+        <button class="btn-cancel" onclick="closeConfirm()">Cancelar</button>
+        <button class="btn-confirm-remove" id="confirm-remove-btn">Remover</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    const JSONBIN_BASE = 'https://api.jsonbin.io/v3/b';
+    const MASTER_KEY = '$2a$10$0KqHi.ihU6xme191z6GkOu/SRWDo7RmXSgZdnYdDg0Zb7rp0Ekoh6';
+    const USERS_BIN = '69cc2461aaba882197b0dc8a';
+
+    let allUsers = [];
+    let pendingRemoveId = null;
+
+    async function loadUsers() {
+      const content = document.getElementById('content');
+      content.innerHTML = '<div class="loading"><div class="spinner"></div><p>Carregando membros...</p></div>';
+
+      try {
+        const res = await fetch(`${JSONBIN_BASE}/${USERS_BIN}/latest`, {
+          headers: { 'X-Master-Key': MASTER_KEY },
+        });
+        const json = await res.json();
+        allUsers = json.record.users || [];
+
+        document.getElementById('subtitle').textContent =
+          `${allUsers.length} membro${allUsers.length !== 1 ? 's' : ''} registrado${allUsers.length !== 1 ? 's' : ''}`;
+
+        renderUsers();
+      } catch (err) {
+        content.innerHTML = `<div class="empty-state boxed"><div class="icon">⚠️</div><p>Erro ao carregar membros.<br>${err.message}</p></div>`;
+      }
+    }
+
+    function avatarURL(user) {
+      if (user.avatar) return `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`;
+      return `https://cdn.discordapp.com/embed/avatars/${parseInt(user.discordId) % 5}.png`;
+    }
+
+    function renderUsers() {
+      const content = document.getElementById('content');
+
+      if (allUsers.length === 0) {
+        content.innerHTML = `
+          <div class="empty-state boxed">
+            <div class="icon">👥</div>
+            <p>Nenhum membro registrado ainda.<br>
+            <a href="register.html" style="color:#5865f2;">Registre o primeiro membro</a></p>
+          </div>`;
+        return;
+      }
+
+      const sorted = [...allUsers].sort((a, b) => a.username.localeCompare(b.username));
+      let html = '<div class="users-grid">';
+
+      for (const u of sorted) {
+        const badge = u.active !== false
+          ? '<span class="badge-active">● Ativo</span>'
+          : '<span class="badge-inactive">● Inativo</span>';
+
+        const joined = u.createdAt
+          ? new Date(u.createdAt).toLocaleDateString('pt-BR', { timeZone: 'UTC' })
+          : '—';
+
+        html += `
+          <div class="user-card" id="card-${u._id}">
+            <img src="${avatarURL(u)}" alt="${u.username}" />
+            <div class="user-card-info">
+              <strong>${u.username}</strong>
+              <span>ID: ${u.discordId}</span>
+              <span>Registrado em: ${joined}</span>
+              ${badge}
+            </div>
+            <button class="btn-remove" onclick="askRemove('${u._id}', '${u.username}')" title="Remover da daily">✕</button>
+          </div>`;
+      }
+
+      html += '</div>';
+      content.innerHTML = html;
+    }
+
+    function askRemove(userId, username) {
+      pendingRemoveId = userId;
+      document.getElementById('confirm-msg').textContent =
+        `Remover "${username}" da daily? Ele não receberá mais as mensagens automáticas.`;
+      document.getElementById('confirm-overlay').classList.add('visible');
+
+      document.getElementById('confirm-remove-btn').onclick = () => confirmRemove();
+    }
+
+    function closeConfirm() {
+      document.getElementById('confirm-overlay').classList.remove('visible');
+      pendingRemoveId = null;
+    }
+
+    async function confirmRemove() {
+      if (!pendingRemoveId) return;
+
+      const btn = document.getElementById('confirm-remove-btn');
+      btn.textContent = 'Removendo...';
+      btn.disabled = true;
+
+      try {
+        const updated = allUsers.filter(u => u._id !== pendingRemoveId);
+
+        await fetch(`${JSONBIN_BASE}/${USERS_BIN}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Master-Key': MASTER_KEY,
+          },
+          body: JSON.stringify({ users: updated }),
+        });
+
+        allUsers = updated;
+        document.getElementById('subtitle').textContent =
+          `${allUsers.length} membro${allUsers.length !== 1 ? 's' : ''} registrado${allUsers.length !== 1 ? 's' : ''}`;
+
+        closeConfirm();
+        renderUsers();
+      } catch (err) {
+        btn.textContent = 'Remover';
+        btn.disabled = false;
+        alert('Erro ao remover membro: ' + err.message);
+      }
+    }
+
+    // Fecha o modal ao clicar fora
+    document.getElementById('confirm-overlay').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) closeConfirm();
+    });
+
+    if (requireAuth()) loadUsers();
+  </script>
+</body>
+</html>
