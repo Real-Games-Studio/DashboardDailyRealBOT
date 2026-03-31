@@ -18,41 +18,6 @@
       line-height: 1.6;
     }
 
-    .command-box {
-      background: #16213e;
-      border: 1px dashed #5865f2;
-      padding: 16px;
-      border-radius: 8px;
-      margin-top: 24px;
-      text-align: center;
-      display: none;
-    }
-    .command-box.visible { display: block; }
-
-    .command-text {
-      font-family: 'Courier New', monospace;
-      background: #1a1a2e;
-      padding: 12px;
-      border-radius: 6px;
-      color: #5865f2;
-      font-weight: 600;
-      word-break: break-all;
-      margin-bottom: 12px;
-    }
-
-    .btn-copy {
-      background: #22c55e;
-      color: #fff;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-weight: 600;
-      transition: background 0.2s;
-    }
-    .btn-copy:hover { background: #16a34a; }
-    .btn-copy.copied { background: #4ade80; }
-
     .step-list { list-style: none; padding: 0; }
     .step-list li {
       padding: 12px 0;
@@ -95,7 +60,6 @@
     .btn-discord:hover { background: #4752c4; }
     .btn-discord:active { transform: scale(0.98); }
 
-    /* Perfil do usuário (após autenticação) */
     .user-profile {
       display: none;
       align-items: center;
@@ -123,17 +87,32 @@
     }
     .loading-discord.visible { display: block; }
 
-    .success-banner {
+    .result-box {
       display: none;
+      border-radius: 10px;
+      padding: 20px;
+      text-align: center;
+      margin-top: 16px;
+    }
+    .result-box.visible { display: block; }
+    .result-box.success {
       background: #0f4620;
       border: 1px solid #22c55e;
       color: #86efac;
-      border-radius: 8px;
-      padding: 12px 16px;
-      margin-top: 12px;
-      font-size: 0.875rem;
     }
-    .success-banner.visible { display: block; }
+    .result-box.already {
+      background: #1a2a10;
+      border: 1px solid #4ade80;
+      color: #86efac;
+    }
+    .result-box.error {
+      background: #3d1515;
+      border: 1px solid #f87171;
+      color: #f87171;
+    }
+    .result-box .result-icon { font-size: 2rem; margin-bottom: 8px; }
+    .result-box strong { display: block; font-size: 1rem; margin-bottom: 4px; }
+    .result-box p { font-size: 0.875rem; opacity: 0.85; }
   </style>
 </head>
 <body data-page="register">
@@ -152,7 +131,7 @@
 
   <div class="container register-container">
     <h1>Registrar na Daily</h1>
-    <p class="page-subtitle">Entre com Discord para se registrar e receber as dailies automáticas</p>
+    <p class="page-subtitle">Entre com Discord para participar das dailies automáticas</p>
 
     <div class="info-box">
       ℹ️ Você receberá mensagens diretas do bot todos os dias úteis às 9h (horário de Brasília) solicitando seus relatórios de daily.
@@ -160,10 +139,10 @@
 
     <div style="background: #16213e; border: 1px solid #0f3460; border-radius: 12px; padding: 24px;">
 
-      <!-- Loading enquanto processa o token do Discord -->
+      <!-- Loading -->
       <div class="loading-discord" id="loading-discord">
         <div class="spinner" style="margin: 0 auto 12px;"></div>
-        <p>Obtendo seus dados do Discord...</p>
+        <p id="loading-text">Obtendo seus dados do Discord...</p>
       </div>
 
       <!-- Perfil do usuário após login -->
@@ -175,7 +154,7 @@
         </div>
       </div>
 
-      <!-- Botão de login Discord (estado inicial) -->
+      <!-- Botão de login Discord -->
       <div id="discord-login-section">
         <a id="discord-oauth-btn" href="#" class="btn-discord">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="#ffffff">
@@ -184,54 +163,40 @@
           Entrar com Discord
         </a>
         <p style="color:#4a5568; font-size:0.8rem; margin-top: 12px; text-align: center;">
-          Apenas lemos seu nome de usuário e ID. Sem acesso a mensagens ou servidores.
+          Apenas lemos seu nome e ID. Sem acesso a mensagens ou servidores.
         </p>
       </div>
 
-      <!-- Comando gerado (após login) -->
-      <div class="command-box" id="command-box">
-        <p style="color: #8892a4; font-size: 0.85rem; margin-bottom: 12px;">
-          Copie o comando abaixo e envie uma <strong style="color:#fff;">mensagem privada</strong> para o bot no Discord:
-        </p>
-        <div class="command-text" id="command-text"></div>
-        <button class="btn-copy" id="copy-btn" onclick="copyCommand()">
-          📋 Copiar Comando
-        </button>
-        <div class="success-banner" id="success-msg">
-          ✓ Comando copiado! Agora envie para o bot no Discord.
-        </div>
+      <!-- Resultado do registro -->
+      <div class="result-box" id="result-box">
+        <div class="result-icon" id="result-icon"></div>
+        <strong id="result-title"></strong>
+        <p id="result-msg"></p>
       </div>
 
       <!-- Passos -->
-      <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #0f3460;">
+      <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #0f3460;" id="steps-section">
         <h3 style="color: #ffffff; margin-bottom: 16px; font-size: 1rem;">Como funciona:</h3>
         <ol class="step-list">
           <li>
             <div class="step-number">1</div>
             <div>
-              <strong style="color:#fff;">Entre com Discord</strong><br>
-              <span style="color:#8892a4; font-size:0.85rem;">Clique no botão acima e autorize com sua conta</span>
+              <strong style="color:#fff;">Clique em "Entrar com Discord"</strong><br>
+              <span style="color:#8892a4; font-size:0.85rem;">Autorize com sua conta do Discord</span>
             </div>
           </li>
           <li>
             <div class="step-number">2</div>
             <div>
-              <strong style="color:#fff;">Copie o comando gerado</strong><br>
-              <span style="color:#8892a4; font-size:0.85rem;">Seu ID é preenchido automaticamente</span>
+              <strong style="color:#fff;">Registro automático</strong><br>
+              <span style="color:#8892a4; font-size:0.85rem;">Seu usuário é salvo automaticamente — sem nenhuma etapa extra</span>
             </div>
           </li>
           <li>
             <div class="step-number">3</div>
             <div>
-              <strong style="color:#fff;">Envie pro bot</strong><br>
-              <span style="color:#8892a4; font-size:0.85rem;">Abra uma DM com o bot no Discord e cole o comando</span>
-            </div>
-          </li>
-          <li>
-            <div class="step-number">4</div>
-            <div>
-              <strong style="color:#fff;">Pronto!</strong><br>
-              <span style="color:#8892a4; font-size:0.85rem;">O bot confirmará e você começará a receber as dailies às 9h</span>
+              <strong style="color:#fff;">Receba as dailies</strong><br>
+              <span style="color:#8892a4; font-size:0.85rem;">O bot te manda DM todos os dias úteis às 9h</span>
             </div>
           </li>
         </ol>
@@ -241,98 +206,124 @@
   </div>
 
   <script>
-    // ==========================================
-    // CONFIG — preencher com seu Client ID do Discord
-    // ==========================================
     const DISCORD_CLIENT_ID = '1488605162330132510';
-    // URL desta página (usada como redirect_uri no OAuth)
+    const JSONBIN_BASE = 'https://api.jsonbin.io/v3/b';
+    const JSONBIN_MASTER_KEY = '$2a$10$0KqHi.ihU6xme191z6GkOu/SRWDo7RmXSgZdnYdDg0Zb7rp0Ekoh6';
+    const USERS_BIN = '69cc2461aaba882197b0dc8a';
     const REDIRECT_URI = window.location.origin + window.location.pathname;
 
-    // ==========================================
-    // MONTAGEM DO LINK DE OAUTH (Implicit Flow)
-    // ==========================================
-    function buildOAuthURL() {
-      const params = new URLSearchParams({
-        client_id: DISCORD_CLIENT_ID,
-        redirect_uri: REDIRECT_URI,
-        response_type: 'token',
-        scope: 'identify',
-      });
-      return `https://discord.com/oauth2/authorize?${params}`;
+    document.getElementById('discord-oauth-btn').href =
+      `https://discord.com/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&scope=identify`;
+
+    function showResult(type, icon, title, msg) {
+      const box = document.getElementById('result-box');
+      box.className = `result-box visible ${type}`;
+      document.getElementById('result-icon').textContent = icon;
+      document.getElementById('result-title').textContent = title;
+      document.getElementById('result-msg').textContent = msg;
     }
 
-    document.getElementById('discord-oauth-btn').href = buildOAuthURL();
+    async function readBin() {
+      const res = await fetch(`${JSONBIN_BASE}/${USERS_BIN}/latest`, {
+        headers: { 'X-Master-Key': JSONBIN_MASTER_KEY },
+      });
+      const json = await res.json();
+      return json.record.users || [];
+    }
 
-    // ==========================================
-    // PROCESSAMENTO DO TOKEN (retorno do Discord)
-    // ==========================================
+    async function writeBin(users) {
+      await fetch(`${JSONBIN_BASE}/${USERS_BIN}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Master-Key': JSONBIN_MASTER_KEY,
+        },
+        body: JSON.stringify({ users }),
+      });
+    }
+
+    function generateId() {
+      return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    }
+
+    async function registerUser(discordUser) {
+      const users = await readBin();
+      const existing = users.find(u => u.discordId === discordUser.id);
+
+      if (existing) {
+        showResult('already', '✓', 'Você já está registrado!',
+          `Bem-vindo de volta, ${existing.username}! Você já receberá as dailies às 9h.`);
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const avatarURL = discordUser.avatar
+        ? `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`
+        : `https://cdn.discordapp.com/embed/avatars/${parseInt(discordUser.id) % 5}.png`;
+
+      const newUser = {
+        _id: generateId(),
+        discordId: discordUser.id,
+        username: discordUser.username,
+        avatar: discordUser.avatar || null,
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      users.push(newUser);
+      await writeBin(users);
+
+      showResult('success', '🎉', 'Registrado com sucesso!',
+        `Bem-vindo, ${newUser.username}! Você receberá as dailies todos os dias úteis às 9h.`);
+    }
+
     async function handleDiscordCallback() {
       const hash = window.location.hash;
-      if (!hash || !hash.includes('access_token')) return false;
+      if (!hash || !hash.includes('access_token')) return;
 
-      // Remove o hash da URL sem recarregar a página
       history.replaceState(null, '', window.location.pathname);
 
       const params = new URLSearchParams(hash.slice(1));
       const token = params.get('access_token');
-      if (!token) return false;
+      if (!token) return;
 
-      // Mostra loading
       document.getElementById('loading-discord').classList.add('visible');
       document.getElementById('discord-login-section').style.display = 'none';
+      document.getElementById('steps-section').style.display = 'none';
 
       try {
         const res = await fetch('https://discord.com/api/v10/users/@me', {
           headers: { Authorization: `Bearer ${token}` },
         });
-
         if (!res.ok) throw new Error('Falha ao buscar dados do Discord');
+        const discordUser = await res.json();
 
-        const user = await res.json();
-
-        // Esconde loading, mostra perfil
-        document.getElementById('loading-discord').classList.remove('visible');
-        document.getElementById('discord-login-section').style.display = 'none';
-
-        const avatarURL = user.avatar
-          ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`
-          : `https://cdn.discordapp.com/embed/avatars/${parseInt(user.id) % 5}.png`;
+        // Mostra perfil
+        const avatarURL = discordUser.avatar
+          ? `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`
+          : `https://cdn.discordapp.com/embed/avatars/${parseInt(discordUser.id) % 5}.png`;
 
         document.getElementById('user-avatar').src = avatarURL;
-        document.getElementById('user-username').textContent = user.username;
-        document.getElementById('user-id-display').textContent = `ID: ${user.id}`;
+        document.getElementById('user-username').textContent = discordUser.username;
+        document.getElementById('user-id-display').textContent = `ID: ${discordUser.id}`;
         document.getElementById('user-profile').classList.add('visible');
 
-        // Gera o comando automaticamente
-        const command = `/registrar ${user.id}`;
-        document.getElementById('command-text').textContent = command;
-        document.getElementById('command-box').classList.add('visible');
+        // Atualiza loading para "Registrando..."
+        document.getElementById('loading-text').textContent = 'Registrando no sistema...';
 
-        return true;
+        // Salva no JSONBin
+        await registerUser(discordUser);
+
+        document.getElementById('loading-discord').classList.remove('visible');
       } catch (err) {
         document.getElementById('loading-discord').classList.remove('visible');
         document.getElementById('discord-login-section').style.display = '';
-        alert('Erro ao obter dados do Discord. Tente novamente.');
-        return false;
+        document.getElementById('steps-section').style.display = '';
+        showResult('error', '⚠️', 'Erro ao registrar', err.message + '. Tente novamente.');
       }
     }
 
-    function copyCommand() {
-      const command = document.getElementById('command-text').textContent;
-      navigator.clipboard.writeText(command).then(() => {
-        const btn = document.getElementById('copy-btn');
-        btn.textContent = '✓ Copiado!';
-        btn.classList.add('copied');
-        document.getElementById('success-msg').classList.add('visible');
-        setTimeout(() => {
-          btn.textContent = '📋 Copiar Comando';
-          btn.classList.remove('copied');
-          document.getElementById('success-msg').classList.remove('visible');
-        }, 3000);
-      });
-    }
-
-    // Ao carregar a página verifica se está voltando do OAuth
     handleDiscordCallback();
   </script>
 </body>
