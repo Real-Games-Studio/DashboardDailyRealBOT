@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Minha Daily — Histórico</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body data-page="me">
+
+  <nav>
+    <a href="dashboard.html" class="nav-brand">📋 Daily Bot</a>
+    <div class="nav-links">
+      <a href="dashboard.html">Dashboard</a>
+      <a href="me.html" class="active">Minha Daily</a>
+    </div>
+    <div class="nav-actions">
+      <a href="#" class="btn-logout" onclick="logout(); return false;">Sair ✕</a>
+    </div>
+  </nav>
+
+  <div class="container narrow">
+    <h1>Minha Daily</h1>
+    <p class="page-subtitle">Selecione um membro para ver o histórico pessoal</p>
+
+    <div class="user-select-wrapper">
+      <select id="user-select">
+        <option value="">Carregando...</option>
+      </select>
+    </div>
+
+    <div id="content"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Daily Stand-up Bot — Login</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="page-login" data-page="login">
+  <div class="card">
+    <div class="logo">📋</div>
+    <h1>Daily Stand-up Bot</h1>
+    <p class="subtitle">
+      Gerencie as dailies da sua equipe diretamente pelo Discord.<br>
+      Entre com a senha para acessar os relatórios.
+    </p>
+
+    <div id="login-error" class="error-banner">
+      ⚠️ Senha incorreta. Tente novamente.
+    </div>
+
+    <form id="login-form">
+      <div class="input-group">
+        <input type="password" id="password-input" placeholder="Digite a senha" required autocomplete="off" />
+        <button type="submit" class="btn-login">Entrar</button>
+      </div>
+    </form>
+
+    <p class="footer-note">
+      Acesso restrito aos membros da equipe.
+    </p>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

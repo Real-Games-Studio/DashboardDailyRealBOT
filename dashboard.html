@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — Daily Stand-ups</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body data-page="dashboard">
+
+  <nav>
+    <a href="dashboard.html" class="nav-brand">📋 Daily Bot</a>
+    <div class="nav-links">
+      <a href="dashboard.html" class="active">Dashboard</a>
+      <a href="me.html">Minha Daily</a>
+    </div>
+    <div class="nav-actions">
+      <a href="#" class="btn-logout" onclick="logout(); return false;">Sair ✕</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <h1>Relatórios da Equipe</h1>
+    <p class="page-subtitle">Últimos 50 relatórios de todos os membros registrados</p>
+
+    <div id="content"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
