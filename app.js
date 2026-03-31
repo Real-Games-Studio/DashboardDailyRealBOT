@@ -90,6 +90,47 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+/**
+ * Formata o texto das respostas da daily para HTML legível.
+ * - Detecta itens com hífen (` - ` ou início de linha com `- `) → <ul><li>
+ * - Respeita quebras de linha \n
+ * - Faz escape de HTML para segurança
+ */
+function formatText(text) {
+  if (!text) return '';
+
+  // Normaliza: troca " - " (separador inline) por quebra de linha + hífen
+  // para unificar o tratamento
+  let normalized = text
+    .replace(/\r\n/g, '\n')
+    // " - " no meio de uma linha vira newline + "- "
+    .replace(/ - /g, '\n- ');
+
+  const lines = normalized.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+  // Verifica se a maioria das linhas são itens de lista
+  const listLines = lines.filter(l => l.startsWith('- ') || l.startsWith('* '));
+  const isList = listLines.length > 0 && listLines.length >= Math.ceil(lines.length / 2);
+
+  if (isList) {
+    // Renderiza como lista <ul>
+    let html = '<ul class="report-list">';
+    for (const line of lines) {
+      if (line.startsWith('- ') || line.startsWith('* ')) {
+        html += `<li>${escapeHtml(line.slice(2))}</li>`;
+      } else {
+        // Linha sem hífen dentro de um bloco de lista → item também
+        html += `<li>${escapeHtml(line)}</li>`;
+      }
+    }
+    html += '</ul>';
+    return html;
+  }
+
+  // Texto normal: respeita quebras de linha
+  return lines.map(l => `<span>${escapeHtml(l)}</span>`).join('<br>');
+}
+
 // ==========================================
 // RENDERERS
 // ==========================================
@@ -119,15 +160,15 @@ function renderDashboard(reports, userMap) {
       : '<span style="color:#4a5568">Usuário removido</span>';
 
     const yesterday = r.yesterday
-      ? `<td class="text-cell">${escapeHtml(r.yesterday)}</td>`
+      ? `<td class="text-cell">${formatText(r.yesterday)}</td>`
       : '<td class="text-cell empty">—</td>';
 
     const today = r.today
-      ? `<td class="text-cell">${escapeHtml(r.today)}</td>`
+      ? `<td class="text-cell">${formatText(r.today)}</td>`
       : '<td class="text-cell empty">—</td>';
 
     const blockers = r.blockers
-      ? `<td class="text-cell"><span class="badge-blocker">🚧 ${escapeHtml(r.blockers)}</span></td>`
+      ? `<td class="text-cell"><span class="badge-blocker">🚧 ${formatText(r.blockers)}</span></td>`
       : '<td class="text-cell"><span style="color:#22c55e">✓ Nenhum</span></td>';
 
     rows += `<tr>
@@ -227,15 +268,15 @@ function renderMePage(user, reports) {
       const dayStr = formatWeekday(r.date);
 
       const yesterdayP = r.yesterday
-        ? `<p>${escapeHtml(r.yesterday)}</p>`
+        ? `<div class="report-text">${formatText(r.yesterday)}</div>`
         : '<p class="empty">Não informado</p>';
 
       const todayP = r.today
-        ? `<p>${escapeHtml(r.today)}</p>`
+        ? `<div class="report-text">${formatText(r.today)}</div>`
         : '<p class="empty">Não informado</p>';
 
       const blockersP = r.blockers
-        ? `<p class="blocker">${escapeHtml(r.blockers)}</p>`
+        ? `<div class="report-text blocker">${formatText(r.blockers)}</div>`
         : '<p style="color:#22c55e">Nenhum</p>';
 
       html += `
