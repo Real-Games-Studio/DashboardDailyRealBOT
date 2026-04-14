@@ -63,7 +63,19 @@ jobs:
               sys.exit(0)
 
           data = res.json()
-          app  = data.get("app") or (data.get("apps") or [{}])[0]
+          print(f"[Watchdog] Resposta raw: {data}")
+
+          app = data.get("app")
+          if not app:
+              apps = data.get("apps")
+              if isinstance(apps, dict):
+                  app = next(iter(apps.values()), {})
+              elif isinstance(apps, list) and apps:
+                  app = apps[0]
+              else:
+                  app = {}
+
+          print(f"[Watchdog] App data: {app}")
           container = str(app.get("container", "")).lower()
           online    = app.get("online", False)
 
