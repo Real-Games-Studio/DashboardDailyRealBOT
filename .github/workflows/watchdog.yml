@@ -1,0 +1,106 @@
+name: Bot Watchdog
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # a cada 5 minutos
+  workflow_dispatch:          # permite rodar manualmente pelo painel do GitHub
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checar status e reiniciar se offline
+        env:
+          DISCLOUD_TOKEN: ${{ secrets.DISCLOUD_TOKEN }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+        run: |
+          python3 << 'EOF'
+          import os
+          import sys
+          import requests
+          from datetime import datetime, timezone
+
+          DISCLOUD_TOKEN    = os.environ["DISCLOUD_TOKEN"]
+          DISCORD_BOT_TOKEN = os.environ["DISCORD_BOT_TOKEN"]
+          APP_ID            = "dailyinbot"
+          OWNER_ID          = "287048260655382529"
+
+          def ts():
+              return datetime.now(timezone.utc).strftime("%d/%m/%Y às %H:%M UTC")
+
+          def send_dm(text):
+              r = requests.post(
+                  "https://discord.com/api/v10/users/@me/channels",
+                  headers={"Authorization": f"Bot {DISCORD_BOT_TOKEN}", "Content-Type": "application/json"},
+                  json={"recipient_id": OWNER_ID},
+                  timeout=10,
+              )
+              if r.status_code not in (200, 201):
+                  print(f"[DM] Erro ao abrir canal: {r.status_code} {r.text}")
+                  return
+              channel_id = r.json()["id"]
+              r2 = requests.post(
+                  f"https://discord.com/api/v10/channels/{channel_id}/messages",
+                  headers={"Authorization": f"Bot {DISCORD_BOT_TOKEN}", "Content-Type": "application/json"},
+                  json={"content": text},
+                  timeout=10,
+              )
+              print(f"[DM] Enviada: {r2.status_code}")
+
+          # ── Checar status no Discloud ──────────────────────────────────
+          try:
+              res = requests.get(
+                  f"https://api.discloud.app/v2/app/{APP_ID}",
+                  headers={"api-token": DISCLOUD_TOKEN},
+                  timeout=10,
+              )
+          except Exception as e:
+              print(f"[Watchdog] Falha ao chamar Discloud API: {e}")
+              sys.exit(0)
+
+          if res.status_code != 200:
+              print(f"[Watchdog] Resposta inesperada: {res.status_code} {res.text}")
+              sys.exit(0)
+
+          data = res.json()
+          app  = data.get("app") or (data.get("apps") or [{}])[0]
+          container = str(app.get("container", "")).lower()
+          online    = app.get("online", False)
+
+          is_online = online is True or container == "online"
+
+          print(f"[Watchdog] Status: container={container!r} online={online!r} → {'✅ OK' if is_online else '❌ OFFLINE'}")
+
+          if is_online:
+              sys.exit(0)
+
+          # ── Bot offline: reinicia ──────────────────────────────────────
+          print("[Watchdog] Bot offline! Enviando restart...")
+          try:
+              r_restart = requests.put(
+                  f"https://api.discloud.app/v2/app/{APP_ID}/restart",
+                  headers={"api-token": DISCLOUD_TOKEN},
+                  timeout=15,
+              )
+              print(f"[Watchdog] Restart: {r_restart.status_code} {r_restart.text}")
+              restart_ok = r_restart.status_code == 200
+          except Exception as e:
+              print(f"[Watchdog] Falha no restart: {e}")
+              restart_ok = False
+
+          # ── Notifica no Discord ───────────────────────────────────────
+          if restart_ok:
+              msg = (
+                  f"⚠️ **DailyInBot caiu e foi reiniciado automaticamente.**\n"
+                  f"🕐 {ts()}\n"
+                  f"_Verifique os logs no Discloud para entender o motivo._"
+              )
+          else:
+              msg = (
+                  f"🚨 **DailyInBot caiu e o restart automático FALHOU.**\n"
+                  f"🕐 {ts()}\n"
+                  f"_Entre no Discloud e reinicie manualmente._"
+              )
+
+          send_dm(msg)
+          EOF
