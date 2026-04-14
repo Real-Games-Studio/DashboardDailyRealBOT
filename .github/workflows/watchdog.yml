@@ -63,25 +63,13 @@ jobs:
               sys.exit(0)
 
           data = res.json()
-          print(f"[Watchdog] Resposta raw: {data}")
+          # Discloud retorna o app diretamente em "apps"
+          app = data.get("app") or data.get("apps", {})
+          online = app.get("online", False)
 
-          app = data.get("app")
-          if not app:
-              apps = data.get("apps")
-              if isinstance(apps, dict):
-                  app = next(iter(apps.values()), {})
-              elif isinstance(apps, list) and apps:
-                  app = apps[0]
-              else:
-                  app = {}
+          is_online = online is True
 
-          print(f"[Watchdog] App data: {app}")
-          container = str(app.get("container", "")).lower()
-          online    = app.get("online", False)
-
-          is_online = online is True or container == "online"
-
-          print(f"[Watchdog] Status: container={container!r} online={online!r} → {'✅ OK' if is_online else '❌ OFFLINE'}")
+          print(f"[Watchdog] Status: online={online!r} → {'✅ OK' if is_online else '❌ OFFLINE'}")
 
           if is_online:
               sys.exit(0)
