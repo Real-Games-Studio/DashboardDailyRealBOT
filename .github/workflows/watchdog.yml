@@ -22,7 +22,7 @@ jobs:
 
           DISCLOUD_TOKEN    = os.environ["DISCLOUD_TOKEN"]
           DISCORD_BOT_TOKEN = os.environ["DISCORD_BOT_TOKEN"]
-          APP_ID            = "dailyinbot"
+          APP_ID            = "1776184151523"
           OWNER_ID          = "287048260655382529"
 
           def ts():
