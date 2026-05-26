@@ -83,13 +83,35 @@ jobs:
                   timeout=15,
               )
               print(f"[Watchdog] Restart: {r_restart.status_code} {r_restart.text}")
-              restart_ok = r_restart.status_code == 200
           except Exception as e:
-              print(f"[Watchdog] Falha no restart: {e}")
-              restart_ok = False
+              print(f"[Watchdog] Falha ao chamar restart: {e}")
+
+          # Poll pós-restart: confirma que voltou online de fato (não confia só no 200 do PUT)
+          import time
+          came_back = False
+          for attempt in range(1, 5):  # 4 tentativas × 15s = até 60s
+              time.sleep(15)
+              try:
+                  r2 = requests.get(
+                      f"https://api.discloud.app/v2/app/{APP_ID}",
+                      headers={"api-token": DISCLOUD_TOKEN},
+                      timeout=10,
+                  )
+                  if r2.status_code == 200:
+                      d2 = r2.json()
+                      app2 = d2.get("app") or d2.get("apps", {})
+                      on2 = app2.get("online", False)
+                      print(f"[Watchdog] Poll {attempt}/4: online={on2!r}")
+                      if on2 is True:
+                          came_back = True
+                          break
+                  else:
+                      print(f"[Watchdog] Poll {attempt}/4 status inesperado: {r2.status_code}")
+              except Exception as e:
+                  print(f"[Watchdog] Poll {attempt}/4 erro: {e}")
 
           # ── Notifica no Discord ───────────────────────────────────────
-          if restart_ok:
+          if came_back:
               msg = (
                   f"⚠️ **DailyInBot caiu e foi reiniciado automaticamente.**\n"
                   f"🕐 {ts()}\n"
@@ -97,9 +119,9 @@ jobs:
               )
           else:
               msg = (
-                  f"🚨 **DailyInBot caiu e o restart automático FALHOU.**\n"
+                  f"🚨 **DailyInBot caiu e NÃO voltou após 60s de tentativa.**\n"
                   f"🕐 {ts()}\n"
-                  f"_Entre no Discloud e reinicie manualmente._"
+                  f"_Entre no Discloud e investigue manualmente._"
               )
 
           send_dm(msg)

@@ -2,10 +2,9 @@
 // CONFIGURAÇÃO
 // ==========================================
 const CONFIG = {
-  JSONBIN_BASE: 'https://api.jsonbin.io/v3/b',
-  ACCESS_KEY: '$2a$10$Mtd.pN.Z0lRl9LI2o23wS.u9f4ZXMVXQ7uvgZcpw2A5M0Pao22Pme',
-  USERS_BIN: '69cc2461aaba882197b0dc8a',
-  REPORTS_BIN: '69cc2461aaba882197b0dc91',
+  // Firebase Realtime Database — leitura pública (regras: /users e /reports somente leitura).
+  // Não há chave secreta aqui: o secret de escrita fica só no bot, no servidor.
+  FIREBASE_URL: 'https://dailyinbot-default-rtdb.firebaseio.com',
   PASSWORD_HASH: '2e014b2fbd7de75f3527cbd40028621025f0e2384a44f1bb06e86e5d3b5c5911',
 };
 
@@ -39,23 +38,21 @@ function logout() {
 // ==========================================
 // DATA FETCHING
 // ==========================================
-async function fetchBin(binId) {
-  const res = await fetch(`${CONFIG.JSONBIN_BASE}/${binId}/latest`, {
-    headers: { 'X-Access-Key': CONFIG.ACCESS_KEY },
-  });
+async function fetchPath(path) {
+  const res = await fetch(`${CONFIG.FIREBASE_URL}/${path}.json`);
   if (!res.ok) throw new Error(`Erro ao buscar dados: ${res.status}`);
-  const json = await res.json();
-  return json.record;
+  // Firebase retorna o JSON salvo direto (sem wrapper "record"); null se o caminho está vazio.
+  return (await res.json()) || {};
 }
 
 async function loadAllData() {
-  const [usersBin, reportsBin] = await Promise.all([
-    fetchBin(CONFIG.USERS_BIN),
-    fetchBin(CONFIG.REPORTS_BIN),
+  const [usersData, reportsData] = await Promise.all([
+    fetchPath('users'),
+    fetchPath('reports'),
   ]);
   return {
-    users: usersBin.users || [],
-    reports: reportsBin.reports || [],
+    users: usersData.users || [],
+    reports: reportsData.reports || [],
   };
 }
 
