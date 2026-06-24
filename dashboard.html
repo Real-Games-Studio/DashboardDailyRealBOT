@@ -12,7 +12,6 @@
     <a href="dashboard.html" class="nav-brand">📋 Daily Bot</a>
     <div class="nav-links">
       <a href="dashboard.html" class="active">Dashboard</a>
-      <a href="me.html">Minha Daily</a>
       <a href="register.html">Registrar</a>
       <a href="users.html">Membros</a>
     </div>
@@ -22,8 +21,16 @@
   </nav>
 
   <div class="container">
-    <h1>Relatórios da Equipe</h1>
-    <p class="page-subtitle">Últimos 50 relatórios de todos os membros registrados</p>
+    <h1 id="page-title">Relatórios da Equipe</h1>
+    <p class="page-subtitle" id="page-subtitle">Últimos 50 relatórios de todos os membros registrados</p>
+
+    <div class="user-select-wrapper">
+      <select id="user-select">
+        <option value="">Carregando...</option>
+      </select>
+    </div>
+
+    <p class="month-meta" id="month-meta"></p>
 
     <div id="content"></div>
   </div>

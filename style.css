@@ -214,6 +214,27 @@ h1 {
   margin-bottom: 28px;
 }
 
+/* Stat sutil do mês acima do conteúdo principal */
+.month-meta {
+  color: #6b7280;
+  font-size: 0.8125rem;
+  margin: 0 0 16px 0;
+  letter-spacing: 0.01em;
+}
+.month-meta:empty { display: none; }
+
+/* Nome/avatar clicável na tabela do dashboard */
+.user-cell.clickable {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  transition: background 0.15s;
+}
+.user-cell.clickable:hover {
+  background: rgba(88, 101, 242, 0.12);
+}
+
 /* ---- Loading ---- */
 .loading {
   text-align: center;

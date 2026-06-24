@@ -129,10 +129,70 @@ function formatText(text) {
 }
 
 // ==========================================
+// ESTATÍSTICAS DO MÊS
+// ==========================================
+const MONTH_NAMES_PT = [
+  'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',
+];
+
+function currentMonthLabel() {
+  const now = new Date();
+  const m = MONTH_NAMES_PT[now.getMonth()];
+  return m.charAt(0).toUpperCase() + m.slice(1);
+}
+
+// Quantos dias úteis (seg-sex) do mês atual já passaram até hoje (inclusive).
+function businessDaysSoFarThisMonth() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const today = now.getDate();
+  let count = 0;
+  for (let d = 1; d <= today; d++) {
+    const wd = new Date(year, month, d).getDay(); // 0=dom, 6=sab
+    if (wd >= 1 && wd <= 5) count++;
+  }
+  return count;
+}
+
+function isThisMonth(dateStr) {
+  // dateStr no formato YYYY-MM-DD (UTC). Compara com mês corrente local.
+  const d = new Date(dateStr + 'T00:00:00Z');
+  const now = new Date();
+  return d.getUTCFullYear() === now.getFullYear() && d.getUTCMonth() === now.getMonth();
+}
+
+function monthStatsForUser(reports, userId) {
+  const done = reports.filter(r => r.userId === userId && isThisMonth(r.date)).length;
+  const expected = businessDaysSoFarThisMonth();
+  return { done, expected };
+}
+
+function monthStatsTeam(reports, activeUserIds) {
+  const done = reports.filter(r => isThisMonth(r.date) && activeUserIds.has(r.userId)).length;
+  const expected = businessDaysSoFarThisMonth() * activeUserIds.size;
+  return { done, expected };
+}
+
+function pct(done, expected) {
+  if (!expected) return 0;
+  return Math.round((done / expected) * 100);
+}
+
+// ==========================================
 // RENDERERS
 // ==========================================
-function renderDashboard(reports, userMap) {
+function renderTeamView(reports, users, userMap) {
   const container = document.getElementById('content');
+  const monthMeta = document.getElementById('month-meta');
+
+  // Stat sutil do mês — agregado do time
+  const activeIds = new Set(users.filter(u => u.active !== false).map(u => u._id));
+  const { done, expected } = monthStatsTeam(reports, activeIds);
+  monthMeta.textContent = expected
+    ? `${currentMonthLabel()}: ${done} de ${expected} dailies enviadas pelo time (${pct(done, expected)}%)`
+    : '';
 
   if (reports.length === 0) {
     container.innerHTML = `
@@ -146,14 +206,14 @@ function renderDashboard(reports, userMap) {
   }
 
   const sorted = [...reports]
-    .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))
+    .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || '').localeCompare(a.createdAt || ''))
     .slice(0, 50);
 
   let rows = '';
   for (const r of sorted) {
     const user = userMap.get(r.userId);
     const userCell = user
-      ? `<div class="user-cell"><img src="${avatarURL(user)}" alt="${escapeHtml(user.username)}" /><strong>${escapeHtml(user.username)}</strong></div>`
+      ? `<div class="user-cell clickable" data-user-id="${user._id}" title="Ver só ${escapeHtml(user.username)}"><img src="${avatarURL(user)}" alt="${escapeHtml(user.username)}" /><strong>${escapeHtml(user.username)}</strong></div>`
       : '<span style="color:#4a5568">Usuário removido</span>';
 
     const yesterday = r.yesterday
@@ -192,11 +252,23 @@ function renderDashboard(reports, userMap) {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+
+  // Clicar no nome/avatar → filtra para aquela pessoa
+  container.querySelectorAll('.user-cell.clickable').forEach(el => {
+    el.addEventListener('click', () => {
+      const uid = el.dataset.userId;
+      const select = document.getElementById('user-select');
+      if (select && uid) {
+        select.value = uid;
+        select.dispatchEvent(new Event('change'));
+      }
+    });
+  });
 }
 
 function renderUserSelect(users, selectedId) {
   const select = document.getElementById('user-select');
-  select.innerHTML = '<option value="">Selecione um membro...</option>';
+  select.innerHTML = '<option value="">Todos os membros</option>';
   const sorted = [...users].sort((a, b) => a.username.localeCompare(b.username));
   for (const u of sorted) {
     const opt = document.createElement('option');
@@ -207,17 +279,9 @@ function renderUserSelect(users, selectedId) {
   }
 }
 
-function renderMePage(user, reports) {
+function renderPersonView(user, reports) {
   const container = document.getElementById('content');
-
-  if (!user) {
-    container.innerHTML = `
-      <div class="empty-state boxed">
-        <div class="icon">👆</div>
-        <p>Selecione um membro acima para ver o histórico.</p>
-      </div>`;
-    return;
-  }
+  const monthMeta = document.getElementById('month-meta');
 
   const userReports = reports
     .filter(r => r.userId === user._id)
@@ -225,6 +289,12 @@ function renderMePage(user, reports) {
 
   const total = userReports.length;
   const withBlockers = userReports.filter(r => r.blockers).length;
+
+  // Stat sutil do mês — pessoal
+  const { done, expected } = monthStatsForUser(reports, user._id);
+  monthMeta.textContent = expected
+    ? `${currentMonthLabel()}: ${done} de ${expected} dailies respondidas (${pct(done, expected)}%)`
+    : '';
 
   let html = `
     <div class="profile-header">
@@ -238,7 +308,7 @@ function renderMePage(user, reports) {
     <div class="stats-row">
       <div class="stat-card">
         <div class="stat-value">${total}</div>
-        <div class="stat-label">Dailies enviadas</div>
+        <div class="stat-label">Dailies enviadas (total)</div>
       </div>
       <div class="stat-card">
         <div class="stat-value red">${withBlockers}</div>
@@ -305,8 +375,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initLogin();
   } else if (page === 'dashboard') {
     if (requireAuth()) initDashboard();
-  } else if (page === 'me') {
-    if (requireAuth()) initMe();
   }
 });
 
@@ -335,55 +403,46 @@ async function initLogin() {
 
 async function initDashboard() {
   const content = document.getElementById('content');
+  const select = document.getElementById('user-select');
+  const title = document.getElementById('page-title');
+  const subtitle = document.getElementById('page-subtitle');
+  const monthMeta = document.getElementById('month-meta');
+
   content.innerHTML = '<div class="loading"><div class="spinner"></div><p>Carregando relatórios...</p></div>';
 
   try {
     const { users, reports } = await loadAllData();
     const userMap = new Map(users.map(u => [u._id, u]));
-    renderDashboard(reports, userMap);
-  } catch (err) {
-    content.innerHTML = `<div class="empty-state boxed"><div class="icon">⚠️</div><p>Erro ao carregar dados.<br>${escapeHtml(err.message)}</p></div>`;
-  }
-}
 
-async function initMe() {
-  const content = document.getElementById('content');
-  const select = document.getElementById('user-select');
-  content.innerHTML = '<div class="loading"><div class="spinner"></div><p>Carregando...</p></div>';
-
-  try {
-    const { users, reports } = await loadAllData();
-    const savedUserId = localStorage.getItem('dailybot_selected_user');
-
+    // Recupera a última seleção salva ("" = Todos os membros)
+    const savedUserId = localStorage.getItem('dailybot_selected_user') || '';
     renderUserSelect(users, savedUserId);
 
-    const selectedUser = users.find(u => u._id === savedUserId);
-    if (selectedUser) {
-      renderMePage(selectedUser, reports);
-    } else {
-      content.innerHTML = `
-        <div class="empty-state boxed">
-          <div class="icon">👆</div>
-          <p>Selecione um membro acima para ver o histórico.</p>
-        </div>`;
+    function render(userId) {
+      if (userId) {
+        const user = users.find(u => u._id === userId);
+        if (user) {
+          title.textContent = user.username;
+          subtitle.textContent = 'Histórico de dailies dessa pessoa';
+          renderPersonView(user, reports);
+          return;
+        }
+      }
+      title.textContent = 'Relatórios da Equipe';
+      subtitle.textContent = 'Últimos 50 relatórios de todos os membros registrados';
+      renderTeamView(reports, users, userMap);
     }
+
+    render(savedUserId);
 
     select.addEventListener('change', () => {
       const userId = select.value;
-      if (userId) {
-        localStorage.setItem('dailybot_selected_user', userId);
-        const user = users.find(u => u._id === userId);
-        renderMePage(user, reports);
-      } else {
-        localStorage.removeItem('dailybot_selected_user');
-        content.innerHTML = `
-          <div class="empty-state boxed">
-            <div class="icon">👆</div>
-            <p>Selecione um membro acima para ver o histórico.</p>
-          </div>`;
-      }
+      if (userId) localStorage.setItem('dailybot_selected_user', userId);
+      else localStorage.removeItem('dailybot_selected_user');
+      render(userId);
     });
   } catch (err) {
+    monthMeta.textContent = '';
     content.innerHTML = `<div class="empty-state boxed"><div class="icon">⚠️</div><p>Erro ao carregar dados.<br>${escapeHtml(err.message)}</p></div>`;
   }
 }
