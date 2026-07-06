@@ -3,35 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dashboard — Daily Stand-ups</title>
+  <title>Dashboard — DailyInBot · Real Games</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body data-page="dashboard">
 
-  <nav>
-    <a href="dashboard.html" class="nav-brand">📋 Daily Bot</a>
-    <div class="nav-links">
-      <a href="dashboard.html" class="active">Dashboard</a>
-      <a href="register.html">Registrar</a>
-      <a href="users.html">Membros</a>
-    </div>
-    <div class="nav-actions">
-      <a href="#" class="btn-logout" onclick="logout(); return false;">Sair ✕</a>
-    </div>
-  </nav>
-
   <div class="container">
-    <h1 id="page-title">Relatórios da Equipe</h1>
-    <p class="page-subtitle" id="page-subtitle">Últimos 50 relatórios de todos os membros registrados</p>
-
-    <div class="user-select-wrapper">
-      <select id="user-select">
-        <option value="">Carregando...</option>
-      </select>
-    </div>
-
-    <p class="month-meta" id="month-meta"></p>
-
+    <h1 class="page-h">Dashboard</h1>
+    <p class="page-subtitle">Dailies do time · Real Games</p>
     <div id="content"></div>
   </div>
 

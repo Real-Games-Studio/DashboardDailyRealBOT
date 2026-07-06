@@ -3,33 +3,52 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Daily Stand-up Bot — Login</title>
+  <title>DailyInBot — Real Games</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body class="page-login" data-page="login">
-  <div class="card">
-    <div class="logo">📋</div>
-    <h1>Daily Stand-up Bot</h1>
-    <p class="subtitle">
-      Gerencie as dailies da sua equipe diretamente pelo Discord.<br>
-      Entre com a senha para acessar os relatórios.
-    </p>
 
-    <div id="login-error" class="error-banner">
-      ⚠️ Senha incorreta. Tente novamente.
+  <div class="login-diag"></div>
+  <div class="login-block" style="left:6%;top:18%;width:170px;height:22px;background:#FFFFFF"></div>
+  <div class="login-block" style="left:9%;top:26%;width:120px;height:14px;background:#000000"></div>
+  <div class="login-block" style="left:4%;bottom:22%;width:150px;height:20px;background:#EE3B8B"></div>
+  <div class="login-block" style="right:7%;top:14%;width:90px;height:14px;background:#EE3B8B"></div>
+  <div class="login-block" style="right:5%;bottom:18%;width:130px;height:16px;background:#FFFFFF"></div>
+  <div class="login-block" style="right:12%;top:24%;width:26px;height:26px;background:#22C9EF"></div>
+
+  <div class="login-card">
+    <svg width="84" height="84" viewBox="0 0 100 100" style="border-radius:10px;border:1px solid #2A2A33">
+      <rect width="100" height="100" fill="#000000"/>
+      <text x="50" y="42" text-anchor="middle" fill="#fff" font-family="Barlow Condensed, sans-serif" font-weight="700" font-size="26" letter-spacing="2">REAL</text>
+      <text x="50" y="68" text-anchor="middle" fill="#fff" font-family="Barlow Condensed, sans-serif" font-weight="700" font-size="26" letter-spacing="2">GAMES</text>
+      <g transform="translate(20,76)">
+        <rect x="0" y="2" width="12" height="2.5" fill="#E24E3D"/><rect x="0" y="6" width="9" height="2.5" fill="#E24E3D"/><rect x="0" y="10" width="12" height="2.5" fill="#E24E3D"/>
+        <circle cx="24" cy="7.5" r="5" stroke="#7ED321" stroke-width="2" fill="none"/><circle cx="24" cy="7.5" r="1.6" fill="#7ED321"/>
+        <rect x="35" y="2" width="4.6" height="4.6" rx="1" fill="#22C9EF"/><rect x="41.4" y="2" width="4.6" height="4.6" rx="1" fill="#22C9EF"/><rect x="35" y="8.4" width="4.6" height="4.6" rx="1" fill="#22C9EF"/><rect x="41.4" y="8.4" width="4.6" height="4.6" rx="1" fill="#22C9EF"/>
+        <polygon points="58,1.5 63,4.4 63,10.6 58,13.5 53,10.6 53,4.4" stroke="#FFD447" stroke-width="2" fill="none"/>
+      </g>
+    </svg>
+    <h1>DailyInBot</h1>
+    <div class="t-mono" style="margin-top:4px">daily stand-ups · real games</div>
+    <div class="login-glyphs">
+      <svg width="15" height="15" viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="3" fill="#E24E3D"/><rect x="1" y="7" width="10" height="3" fill="#E24E3D"/><rect x="1" y="12" width="14" height="3" fill="#E24E3D"/></svg>
+      <svg width="15" height="15" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.4" stroke="#7ED321" stroke-width="2" fill="none"/><circle cx="8" cy="8" r="2.4" fill="#7ED321"/></svg>
+      <svg width="15" height="15" viewBox="0 0 16 16"><rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1.5" fill="#22C9EF"/><rect x="9" y="1.5" width="5.5" height="5.5" rx="1.5" fill="#22C9EF"/><rect x="1.5" y="9" width="5.5" height="5.5" rx="1.5" fill="#22C9EF"/><rect x="9" y="9" width="5.5" height="5.5" rx="1.5" fill="#22C9EF"/></svg>
+      <svg width="15" height="15" viewBox="0 0 16 16"><polygon points="8,1.5 13.9,4.8 13.9,11.2 8,14.5 2.1,11.2 2.1,4.8" stroke="#FFD447" stroke-width="2" fill="none"/></svg>
     </div>
 
-    <form id="login-form">
-      <div class="input-group">
-        <input type="password" id="password-input" placeholder="Digite a senha" required autocomplete="off" />
-        <button type="submit" class="btn-login">Entrar</button>
-      </div>
+    <form id="login-form" style="width:100%">
+      <input type="password" id="password-input" placeholder="Senha do time" required autocomplete="off" />
+      <div id="login-error" class="login-err">▸ senha incorreta, tente de novo</div>
+      <button type="submit" class="btn-login">Entrar ▸</button>
     </form>
 
-    <p class="footer-note">
-      Acesso restrito aos membros da equipe.<br>
-      <a href="register.html" style="color: #5865f2; text-decoration: none;">Ainda não se registrou? Clique aqui</a>
-    </p>
+    <div class="t-mono" style="font-size:10px;color:#5A6273;margin-top:18px">
+      acesso restrito · <a href="register.html" style="color:#22C9EF;text-decoration:none">registrar-se ▸</a>
+    </div>
   </div>
 
   <script src="app.js"></script>
