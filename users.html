@@ -21,7 +21,6 @@
       align-items: center;
       gap: 16px;
       transition: border-color 0.15s;
-      position: relative;
     }
 
     .user-card:hover { border-color: #5865f2; }
@@ -68,72 +67,24 @@
       display: inline-block;
     }
 
-    .btn-remove {
-      background: none;
-      border: 1px solid #7b2020;
-      color: #f87171;
-      width: 30px;
-      height: 30px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 0.9rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      transition: background 0.15s;
-    }
-
-    .btn-remove:hover { background: #3d1515; }
-
-    .confirm-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.7);
-      z-index: 100;
-      align-items: center;
-      justify-content: center;
-    }
-    .confirm-overlay.visible { display: flex; }
-
-    .confirm-box {
-      background: #16213e;
-      border: 1px solid #0f3460;
-      border-radius: 12px;
-      padding: 32px;
-      max-width: 380px;
-      width: 90%;
-      text-align: center;
-    }
-
-    .confirm-box h3 { color: #fff; margin-bottom: 8px; }
-    .confirm-box p { color: #8892a4; font-size: 0.9rem; margin-bottom: 24px; }
-
-    .confirm-actions { display: flex; gap: 12px; justify-content: center; }
-
-    .btn-confirm-remove {
-      background: #dc2626;
-      color: #fff;
-      border: none;
-      padding: 10px 24px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: 600;
-      transition: background 0.2s;
-    }
-    .btn-confirm-remove:hover { background: #b91c1c; }
-
-    .btn-cancel {
+    .mgmt-note {
       background: #0f3460;
-      color: #c9d1d9;
-      border: none;
-      padding: 10px 24px;
+      border-left: 3px solid #5865f2;
+      padding: 12px 16px;
       border-radius: 8px;
-      cursor: pointer;
-      transition: background 0.2s;
+      margin-bottom: 24px;
+      font-size: 0.85rem;
+      color: #c9d1d9;
+      line-height: 1.5;
     }
-    .btn-cancel:hover { background: #1e3a5f; }
+    .mgmt-note code {
+      background: #06170c;
+      color: #86efac;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.85em;
+    }
   </style>
 </head>
 <body data-page="users">
@@ -154,147 +105,66 @@
     <h1>Membros Registrados</h1>
     <p class="page-subtitle" id="subtitle">Carregando...</p>
 
-    <div id="content"></div>
-  </div>
-
-  <!-- Modal de confirmação -->
-  <div class="confirm-overlay" id="confirm-overlay">
-    <div class="confirm-box">
-      <h3>Remover membro?</h3>
-      <p id="confirm-msg">Este membro não receberá mais as dailies automáticas.</p>
-      <div class="confirm-actions">
-        <button class="btn-cancel" onclick="closeConfirm()">Cancelar</button>
-        <button class="btn-confirm-remove" id="confirm-remove-btn">Remover</button>
-      </div>
+    <div class="mgmt-note">
+      💡 Gestão de membros acontece pelo bot no Discord.
+      Pra <strong>registrar</strong>, use a página <a href="register.html" style="color:#5865f2;">Registrar</a>.
+      Pra <strong>desativar/reativar</strong>, mande DM pro bot com o comando adequado.
     </div>
+
+    <div id="content"></div>
   </div>
 
   <script src="app.js"></script>
   <script>
-    const JSONBIN_BASE = 'https://api.jsonbin.io/v3/b';
-    const MASTER_KEY = '$2a$10$0KqHi.ihU6xme191z6GkOu/SRWDo7RmXSgZdnYdDg0Zb7rp0Ekoh6';
-    const USERS_BIN = '69cc2461aaba882197b0dc8a';
-
-    let allUsers = [];
-    let pendingRemoveId = null;
-
     async function loadUsers() {
       const content = document.getElementById('content');
       content.innerHTML = '<div class="loading"><div class="spinner"></div><p>Carregando membros...</p></div>';
 
       try {
-        const res = await fetch(`${JSONBIN_BASE}/${USERS_BIN}/latest`, {
-          headers: { 'X-Master-Key': MASTER_KEY },
-        });
-        const json = await res.json();
-        allUsers = json.record.users || [];
+        const usersData = await fetchPath('users');
+        const users = usersData.users || [];
 
         document.getElementById('subtitle').textContent =
-          `${allUsers.length} membro${allUsers.length !== 1 ? 's' : ''} registrado${allUsers.length !== 1 ? 's' : ''}`;
+          `${users.length} membro${users.length !== 1 ? 's' : ''} registrado${users.length !== 1 ? 's' : ''}`;
 
-        renderUsers();
+        if (users.length === 0) {
+          content.innerHTML = `
+            <div class="empty-state boxed">
+              <div class="icon">👥</div>
+              <p>Nenhum membro registrado ainda.<br>
+              <a href="register.html" style="color:#5865f2;">Registre o primeiro membro</a></p>
+            </div>`;
+          return;
+        }
+
+        const sorted = [...users].sort((a, b) => a.username.localeCompare(b.username));
+        let html = '<div class="users-grid">';
+        for (const u of sorted) {
+          const badge = u.active !== false
+            ? '<span class="badge-active">● Ativo</span>'
+            : '<span class="badge-inactive">● Inativo</span>';
+
+          const joined = u.createdAt
+            ? new Date(u.createdAt).toLocaleDateString('pt-BR', { timeZone: 'UTC' })
+            : '—';
+
+          html += `
+            <div class="user-card">
+              <img src="${avatarURL(u)}" alt="${escapeHtml(u.username)}" />
+              <div class="user-card-info">
+                <strong>${escapeHtml(u.username)}</strong>
+                <span>ID: ${escapeHtml(u.discordId)}</span>
+                <span>Registrado em: ${joined}</span>
+                ${badge}
+              </div>
+            </div>`;
+        }
+        html += '</div>';
+        content.innerHTML = html;
       } catch (err) {
-        content.innerHTML = `<div class="empty-state boxed"><div class="icon">⚠️</div><p>Erro ao carregar membros.<br>${err.message}</p></div>`;
+        content.innerHTML = `<div class="empty-state boxed"><div class="icon">⚠️</div><p>Erro ao carregar membros.<br>${escapeHtml(err.message)}</p></div>`;
       }
     }
-
-    function avatarURL(user) {
-      if (user.avatar) return `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`;
-      return `https://cdn.discordapp.com/embed/avatars/${parseInt(user.discordId) % 5}.png`;
-    }
-
-    function renderUsers() {
-      const content = document.getElementById('content');
-
-      if (allUsers.length === 0) {
-        content.innerHTML = `
-          <div class="empty-state boxed">
-            <div class="icon">👥</div>
-            <p>Nenhum membro registrado ainda.<br>
-            <a href="register.html" style="color:#5865f2;">Registre o primeiro membro</a></p>
-          </div>`;
-        return;
-      }
-
-      const sorted = [...allUsers].sort((a, b) => a.username.localeCompare(b.username));
-      let html = '<div class="users-grid">';
-
-      for (const u of sorted) {
-        const badge = u.active !== false
-          ? '<span class="badge-active">● Ativo</span>'
-          : '<span class="badge-inactive">● Inativo</span>';
-
-        const joined = u.createdAt
-          ? new Date(u.createdAt).toLocaleDateString('pt-BR', { timeZone: 'UTC' })
-          : '—';
-
-        html += `
-          <div class="user-card" id="card-${u._id}">
-            <img src="${avatarURL(u)}" alt="${u.username}" />
-            <div class="user-card-info">
-              <strong>${u.username}</strong>
-              <span>ID: ${u.discordId}</span>
-              <span>Registrado em: ${joined}</span>
-              ${badge}
-            </div>
-            <button class="btn-remove" onclick="askRemove('${u._id}', '${u.username}')" title="Remover da daily">✕</button>
-          </div>`;
-      }
-
-      html += '</div>';
-      content.innerHTML = html;
-    }
-
-    function askRemove(userId, username) {
-      pendingRemoveId = userId;
-      document.getElementById('confirm-msg').textContent =
-        `Remover "${username}" da daily? Ele não receberá mais as mensagens automáticas.`;
-      document.getElementById('confirm-overlay').classList.add('visible');
-
-      document.getElementById('confirm-remove-btn').onclick = () => confirmRemove();
-    }
-
-    function closeConfirm() {
-      document.getElementById('confirm-overlay').classList.remove('visible');
-      pendingRemoveId = null;
-    }
-
-    async function confirmRemove() {
-      if (!pendingRemoveId) return;
-
-      const btn = document.getElementById('confirm-remove-btn');
-      btn.textContent = 'Removendo...';
-      btn.disabled = true;
-
-      try {
-        const updated = allUsers.filter(u => u._id !== pendingRemoveId);
-
-        await fetch(`${JSONBIN_BASE}/${USERS_BIN}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Master-Key': MASTER_KEY,
-          },
-          body: JSON.stringify({ users: updated }),
-        });
-
-        allUsers = updated;
-        document.getElementById('subtitle').textContent =
-          `${allUsers.length} membro${allUsers.length !== 1 ? 's' : ''} registrado${allUsers.length !== 1 ? 's' : ''}`;
-
-        closeConfirm();
-        renderUsers();
-      } catch (err) {
-        btn.textContent = 'Remover';
-        btn.disabled = false;
-        alert('Erro ao remover membro: ' + err.message);
-      }
-    }
-
-    // Fecha o modal ao clicar fora
-    document.getElementById('confirm-overlay').addEventListener('click', (e) => {
-      if (e.target === e.currentTarget) closeConfirm();
-    });
 
     if (requireAuth()) loadUsers();
   </script>
