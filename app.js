@@ -256,6 +256,24 @@ const NAV_ITEMS = [
   { href: 'register.html', label: 'Registrar', glyph: 'hex', color: '#FFD447' },
 ];
 
+const LOGO_MARK = `<svg width="38" height="38" viewBox="0 0 100 100" style="border-radius:6px;flex-shrink:0">
+  <rect width="100" height="100" fill="#000"/>
+  <rect x="4" y="4" width="92" height="92" fill="none" stroke="#fff" stroke-width="3"/>
+  <text x="50" y="44" text-anchor="middle" fill="#fff" font-family="Barlow Condensed, sans-serif" font-weight="700" font-size="27" letter-spacing="2">REAL</text>
+  <text x="50" y="70" text-anchor="middle" fill="#fff" font-family="Barlow Condensed, sans-serif" font-weight="700" font-size="27" letter-spacing="2">GAMES</text>
+  <g transform="translate(24,76)">
+    <rect x="0" y="2" width="9" height="2" fill="#E24E3D"/><rect x="0" y="5.5" width="7" height="2" fill="#E24E3D"/><rect x="0" y="9" width="9" height="2" fill="#E24E3D"/>
+    <circle cx="19" cy="6.5" r="4" stroke="#7ED321" stroke-width="1.6" fill="none"/><circle cx="19" cy="6.5" r="1.3" fill="#7ED321"/>
+    <rect x="28" y="2" width="3.6" height="3.6" rx=".8" fill="#22C9EF"/><rect x="33" y="2" width="3.6" height="3.6" rx=".8" fill="#22C9EF"/><rect x="28" y="7" width="3.6" height="3.6" rx=".8" fill="#22C9EF"/><rect x="33" y="7" width="3.6" height="3.6" rx=".8" fill="#22C9EF"/>
+    <polygon points="46,1.5 50,4 50,9 46,11.5 42,9 42,4" stroke="#FFD447" stroke-width="1.6" fill="none"/>
+  </g>
+</svg>`;
+
+function headerDate() {
+  return new Date().toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
+    .replace(/\./g, '').replace(/ de /g, ' ');
+}
+
 function renderHeader(activePage) {
   const nav = NAV_ITEMS.map(it => {
     const active = it.href === activePage;
@@ -264,14 +282,16 @@ function renderHeader(activePage) {
   return `
   <header class="rg-header">
     <a href="dashboard.html" class="rg-brand">
+      ${LOGO_MARK}
       <div style="display:flex;flex-direction:column">
-        <span class="rg-brand-name">DailyInBot</span>
+        <span class="rg-brand-name rg-glow">DailyInBot</span>
         <span class="rg-brand-sub">real games</span>
       </div>
     </a>
     <nav class="rg-nav">${nav}</nav>
     <button class="btn-daily" onclick="openDailyModal()">▸ Fazer Daily</button>
-    <a href="#" class="btn-logout-rg" onclick="logout(); return false;">SAIR ✕</a>
+    <span class="hdr-date">${headerDate()}</span>
+    <a href="#" class="btn-logout-rg" onclick="logout(); return false;">SAIR</a>
   </header>`;
 }
 
@@ -455,19 +475,26 @@ function renderDashPage(data) {
   const doneToday = new Set(data.reports.filter(r => r.date === today).map(r => r.userId));
   const done = scopeUsers.filter(u => doneToday.has(u._id));
   const pending = scopeUsers.filter(u => !doneToday.has(u._id));
+  const personHtml = (u, isPending) => {
+    const c = colorForUser(u._id);
+    const url = discordAvatarURL(u);
+    let av;
+    if (isPending) {
+      const inner = url ? `style="background-image:url('${url}');border:2px dashed ${c}"` : `style="border:2px dashed ${c};color:${c}"`;
+      av = `<div class="today-avatar pending" ${inner}>${url ? '' : escapeHtml(initials(u.username))}</div>`;
+    } else {
+      av = avatarHtml(u, 'today-avatar');
+    }
+    return `<span class="today-person" onclick="selectMember('${u._id}')" title="${escapeHtml(u.username)}${isPending ? ' — pendente' : ''}">${av}<span class="nm">${escapeHtml(u.username)}</span></span>`;
+  };
   const todayHtml = `
-    <div class="panel rg-in" style="margin-bottom:14px">
+    <div class="panel rg-in">
       <div class="panel-label">${GLYPHS.target} QUEM JÁ FEZ HOJE</div>
+      <div class="panel-sub">${done.length} de ${scopeUsers.length} enviaram</div>
       <div class="today-row">
-        ${done.map(u => `<span onclick="selectMember('${u._id}')" title="${escapeHtml(u.username)}">${avatarHtml(u, 'today-avatar')}</span>`).join('')}
-        ${done.length && pending.length ? '<span class="today-divider"></span>' : ''}
-        ${pending.map(u => {
-          const c = colorForUser(u._id);
-          const url = discordAvatarURL(u);
-          const inner = url ? `style="background-image:url('${url}');border:2px dashed ${c}"` : `style="border:2px dashed ${c};color:${c}"`;
-          return `<span onclick="selectMember('${u._id}')" title="${escapeHtml(u.username)} — pendente"><div class="today-avatar pending" ${inner}>${url ? '' : escapeHtml(initials(u.username))}</div></span>`;
-        }).join('')}
-        <span class="today-count">${done.length} DE ${scopeUsers.length} ENVIARAM</span>
+        ${done.map(u => personHtml(u, false)).join('')}
+        ${done.length && pending.length ? '<span class="today-divider" style="margin-top:10px"></span>' : ''}
+        ${pending.map(u => personHtml(u, true)).join('')}
       </div>
     </div>`;
 
@@ -491,31 +518,44 @@ function renderDashPage(data) {
   }).join('');
   const pct = Math.round((sentTotal / (days.length * total)) * 100);
   const barHtml = `
-    <div class="panel rg-in" style="margin-bottom:14px">
-      <div class="panel-label">${GLYPHS.bars} ÚLTIMOS 30 DIAS ÚTEIS</div>
-      <div style="display:flex;align-items:center;gap:18px">
-        <div class="arcade-bar" style="flex:1">${segs}</div>
-        <div class="arcade-pct">${pct}%</div>
+    <div class="panel rg-in">
+      <div class="panel-label" style="justify-content:space-between">
+        <span style="display:inline-flex;align-items:center;gap:8px">${GLYPHS.bars} ÚLTIMOS 30 DIAS</span>
+        <span class="arcade-pct" style="font-size:22px">${pct}%</span>
       </div>
+      <div class="arcade-bar">${segs}</div>
+      <div class="panel-sub" style="margin:10px 0 0">dailies enviadas pelo time · dias úteis</div>
     </div>`;
 
+  const topHtml = `<div class="dash-top">${todayHtml}${barHtml}</div>`;
+
   // ---- filtros ----
+  // cargo: só mostra o grupo se existir mais de um cargo de verdade
   const roles = [...new Set(activeUsersOf(data).map(u => u.role || NO_ROLE))];
-  const roleChips = `<button class="chip ${!state.role ? 'active' : ''}" onclick="selectRole(null)">Time todo</button>` +
-    roles.map(r => `<button class="chip ${state.role === r ? 'active' : ''}" onclick="selectRole('${escapeHtml(r)}')"><span class="sq" style="background:${colorForRole(r)}"></span>${escapeHtml(r)}</button>`).join('');
+  const showRoles = roles.length > 1;
+  const roleChips = showRoles
+    ? `<button class="chip ${!state.role ? 'active' : ''}" onclick="selectRole(null)">Time todo</button>` +
+      roles.map(r => `<button class="chip ${state.role === r ? 'active' : ''}" onclick="selectRole('${escapeHtml(r)}')"><span class="sq" style="background:${colorForRole(r)}"></span>${escapeHtml(r)}</button>`).join('') +
+      '<span class="filters-divider"></span>'
+    : '';
   const memberChips = `<button class="chip ${!state.member ? 'active' : ''}" onclick="selectMember(null)">Todos</button>` +
     scopeUsers.map(u => `<button class="chip ${state.member === u._id ? 'active' : ''}" onclick="selectMember('${u._id}')"><span class="dot" style="background:${colorForUser(u._id)}"></span>${escapeHtml(u.username)}</button>`).join('');
+  // tags: top 5 + botão pra expandir o resto (mantém a linha limpa)
   const tags = extractTags(data.reports.filter(r => scopeUsers.find(u => u._id === r.userId)));
-  const tagChips = tags.slice(0, 12).map(([tag, cnt]) =>
-    `<button class="chip ${state.tag === tag ? 'active' : ''}" onclick="selectTag('${escapeHtml(tag)}')"><span class="sq" style="background:${colorForTag(tag)}"></span>${escapeHtml(tag)} <span class="cnt">${cnt}</span></button>`
-  ).join('');
-  const filtersHtml = `
-    <div class="filters-row rg-in">
-      ${roleChips}
-      <span class="filters-divider"></span>
-      ${memberChips}
-      ${tags.length ? '<span class="filters-divider"></span>' + tagChips : ''}
-    </div>`;
+  const TAG_LIMIT = 5;
+  const shown = state.tagsExpanded ? tags : tags.slice(0, TAG_LIMIT);
+  // garante que a tag ativa sempre aparece
+  if (state.tag && !shown.find(([t]) => t === state.tag)) {
+    const hit = tags.find(([t]) => t === state.tag);
+    if (hit) shown.push(hit);
+  }
+  const tagChip = ([tag, cnt]) =>
+    `<button class="chip ${state.tag === tag ? 'active' : ''}" onclick="selectTag('${escapeHtml(tag)}')"><span class="sq" style="background:${colorForTag(tag)}"></span>${escapeHtml(tag)} <span class="cnt">${cnt}</span></button>`;
+  const moreBtn = tags.length > TAG_LIMIT
+    ? `<button class="chip" onclick="toggleTags()">${state.tagsExpanded ? '− menos' : `+${tags.length - TAG_LIMIT}`}</button>`
+    : '';
+  const tagChips = tags.length ? '<span class="filters-divider"></span>' + shown.map(tagChip).join('') + moreBtn : '';
+  const filtersHtml = `<div class="filters-row rg-in">${roleChips}${memberChips}${tagChips}</div>`;
 
   // ---- perfil ou lista ----
   let mainHtml;
@@ -526,11 +566,12 @@ function renderDashPage(data) {
     const sorted = [...scopeReports]
       .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || '').localeCompare(a.createdAt || ''))
       .slice(0, 50);
-    mainHtml = sorted.length ? `<div class="reports-table">${sorted.map((r, i) => reportRowHtml(r, userMap, i)).join('')}</div>`
+    const sect = `<div class="sect-head">${GLYPHS.bars} ÚLTIMOS RELATÓRIOS <span class="cnt">${scopeReports.length} relatório${scopeReports.length !== 1 ? 's' : ''}</span></div>`;
+    mainHtml = sorted.length ? sect + `<div class="reports-table">${sorted.map((r, i) => reportRowHtml(r, userMap, i)).join('')}</div>`
       : '<div class="empty-state boxed"><div class="icon">🗂️</div><p>Nenhum relatório com esses filtros.</p></div>';
   }
 
-  content.innerHTML = todayHtml + barHtml + filtersHtml + mainHtml;
+  content.innerHTML = topHtml + filtersHtml + mainHtml;
   window._dashData = data;
 }
 
@@ -548,7 +589,7 @@ function reportRowHtml(r, userMap, i) {
       </div>
     </div>
     <div><div class="report-col-label">${labelA}</div>${linesHtml(r.yesterday)}</div>
-    <div><div class="report-col-label">${labelB}</div>${linesHtml(r.today)}</div>
+    <div><div class="report-col-label hl">${labelB}</div>${linesHtml(r.today)}</div>
     <div>
       <div class="report-col-label">IMPEDIMENTOS</div>
       ${r.blockers ? `<div class="blocker-box">${escapeHtml(r.blockers)}</div>` : '<span class="no-blocker">✓ nenhum</span>'}
@@ -659,6 +700,10 @@ function selectTag(tag) {
   state.tag = state.tag === tag ? null : tag;
   renderDashPage(window._dashData);
 }
+function toggleTags() {
+  state.tagsExpanded = !state.tagsExpanded;
+  renderDashPage(window._dashData);
+}
 
 // ==========================================================
 // PÁGINA: TIMELINE
@@ -700,7 +745,7 @@ async function initTimeline() {
             </div>
             <div class="tl-cols">
               <div><div class="report-col-label">${la}</div>${linesHtml(r.yesterday)}</div>
-              <div><div class="report-col-label">${lb}</div>${linesHtml(r.today)}</div>
+              <div><div class="report-col-label hl">${lb}</div>${linesHtml(r.today)}</div>
             </div>
             ${r.blockers ? `<div class="blocker-box" style="margin-top:10px">🚧 ${escapeHtml(r.blockers)}</div>` : ''}
           </div>`;
