@@ -171,17 +171,30 @@ function linesHtml(text) {
   ).join('') + '</div>';
 }
 
-// ---- streak: dias úteis consecutivos com relatório, de trás pra frente.
-// hoje sem daily ainda não quebra (só não conta).
-function streakFor(userId, reports) {
-  const dates = new Set(reports.filter(r => r.userId === userId).map(r => r.date));
+// ---- presença unificada: daily conta seg–qui; SEXTA conta pelo WEEKLY da semana.
+// (sexta não tem daily — o weekly substitui; sem isso todo mundo "falharia" às sextas)
+function buildSentChecker(data) {
+  const reportSet = new Set(data.reports.map(r => r.userId + '|' + r.date));
+  const weeklySet = new Set((data.weeklies || []).map(w => w.userId + '|' + w.week));
+  return (userId, dateStr) => {
+    if (reportSet.has(userId + '|' + dateStr)) return true;
+    if (dateFromStr(dateStr).getDay() === 5) {
+      return weeklySet.has(userId + '|' + isoWeek(dateStr));
+    }
+    return false;
+  };
+}
+
+// ---- streak: dias úteis consecutivos com presença (daily ou weekly na sexta),
+// de trás pra frente. hoje sem envio ainda não quebra (só não conta).
+function streakFor(userId, data) {
+  const check = buildSentChecker(data);
   let streak = 0;
   const d = new Date();
-  // se hoje não tem, começa de ontem sem quebrar
-  if (!dates.has(dstr(d))) d.setDate(d.getDate() - 1);
+  if (!check(userId, dstr(d))) d.setDate(d.getDate() - 1);
   while (true) {
     if (!isBusinessDay(d)) { d.setDate(d.getDate() - 1); continue; }
-    if (dates.has(dstr(d))) { streak++; d.setDate(d.getDate() - 1); }
+    if (check(userId, dstr(d))) { streak++; d.setDate(d.getDate() - 1); }
     else break;
   }
   return streak;
@@ -471,10 +484,11 @@ function renderDashPage(data) {
   const userMap = new Map(data.users.map(u => [u._id, u]));
   const today = todayStr();
 
-  // ---- quem já fez hoje ----
-  const doneToday = new Set(data.reports.filter(r => r.date === today).map(r => r.userId));
-  const done = scopeUsers.filter(u => doneToday.has(u._id));
-  const pending = scopeUsers.filter(u => !doneToday.has(u._id));
+  // ---- quem já fez hoje (na sexta conta o WEEKLY) ----
+  const checker = buildSentChecker(data);
+  const isFriday = new Date().getDay() === 5;
+  const done = scopeUsers.filter(u => checker(u._id, today));
+  const pending = scopeUsers.filter(u => !checker(u._id, today));
   const personHtml = (u, isPending) => {
     const c = colorForUser(u._id);
     const url = discordAvatarURL(u);
@@ -489,8 +503,8 @@ function renderDashPage(data) {
   };
   const todayHtml = `
     <div class="panel rg-in">
-      <div class="panel-label">${GLYPHS.target} QUEM JÁ FEZ HOJE</div>
-      <div class="panel-sub">${done.length} de ${scopeUsers.length} enviaram</div>
+      <div class="panel-label">${GLYPHS.target} QUEM JÁ FEZ HOJE${isFriday ? ' · 📼 WEEKLY' : ''}</div>
+      <div class="panel-sub">${done.length} de ${scopeUsers.length} enviaram${isFriday ? ' o weekly' : ''}</div>
       <div class="today-row">
         ${done.map(u => personHtml(u, false)).join('')}
         ${done.length && pending.length ? '<span class="today-divider" style="margin-top:10px"></span>' : ''}
@@ -498,17 +512,12 @@ function renderDashPage(data) {
       </div>
     </div>`;
 
-  // ---- barra 30 dias úteis ----
+  // ---- barra 30 dias úteis (sexta conta pelo weekly) ----
   const days = lastBusinessDays(30);
   const total = scopeUsers.length || 1;
-  const byDay = new Map();
-  for (const r of data.reports) {
-    if (!scopeUsers.find(u => u._id === r.userId)) continue;
-    byDay.set(r.date, (byDay.get(r.date) || 0) + 1);
-  }
   let sentTotal = 0;
   const segs = days.map(d => {
-    const n = Math.min(byDay.get(d) || 0, total);
+    const n = Math.min(scopeUsers.filter(u => checker(u._id, d)).length, total);
     sentTotal += n;
     let color = '#1B1B23';
     if (n >= total) color = '#22C9EF';
@@ -587,20 +596,21 @@ function reportRowHtml(r, userMap, i) {
 function renderProfile(user, data) {
   const reports = data.reports.filter(r => r.userId === user._id).sort((a, b) => b.date.localeCompare(a.date));
   const userMap = new Map(data.users.map(u => [u._id, u]));
-  const streak = streakFor(user._id, data.reports);
+  const check = buildSentChecker(data);
+  const streak = streakFor(user._id, data);
   const streakCls = streak >= 5 ? 'streak-badge hot' : 'streak-badge';
 
-  // stats
-  const monthDone = reports.filter(r => isThisMonth(r.date)).length;
+  // stats — presença conta daily seg–qui e weekly na sexta
   const monthExpected = businessDaysSoFarThisMonth();
+  const monthDays = lastBusinessDays(Math.max(monthExpected, 1)).slice(-monthExpected);
+  const monthDone = monthDays.filter(d => check(user._id, d)).length;
   const last12wDays = lastBusinessDays(60);
-  const sentSet = new Set(reports.map(r => r.date));
-  const rate12w = Math.round((last12wDays.filter(d => sentSet.has(d)).length / last12wDays.length) * 100);
+  const rate12w = Math.round((last12wDays.filter(d => check(user._id, d)).length / last12wDays.length) * 100);
   const tags = extractTags(reports);
   const topTag = tags.length ? tags[0][0] : '—';
 
-  const miniBar = lastBusinessDays(Math.max(monthExpected, 1)).slice(-monthExpected).map(d =>
-    `<span style="background:${sentSet.has(d) ? '#22C9EF' : '#1B1B23'}"></span>`).join('');
+  const miniBar = monthDays.map(d =>
+    `<span style="background:${check(user._id, d) ? '#22C9EF' : '#1B1B23'}"></span>`).join('');
 
   // heatmap: 12 semanas × seg-sex
   const heatCols = [];
@@ -617,8 +627,8 @@ function renderProfile(user, data) {
       let cls = '';
       if (d > now) cls = 'future';
       else if (blockedSet.has(ds)) cls = 'blocked';
-      else if (sentSet.has(ds)) cls = 'sent';
-      cells.push(`<div class="heatmap-cell ${cls}" title="${formatDate(ds)}"></div>`);
+      else if (check(user._id, ds)) cls = 'sent';
+      cells.push(`<div class="heatmap-cell ${cls}" title="${formatDate(ds)}${dateFromStr(ds).getDay() === 5 ? ' · weekly' : ''}"></div>`);
     }
     heatCols.push(`<div class="heatmap-col">${cells.join('')}</div>`);
   }
@@ -889,7 +899,7 @@ function renderMembersPage(data, pending) {
     const cards = byRole.get(role)
       .sort((a, b) => a.username.localeCompare(b.username))
       .map((u, i) => {
-        const streak = streakFor(u._id, data.reports);
+        const streak = streakFor(u._id, data);
         const pend = pending[u._id];
         // otimista: se tem pendência, já mostra a escolha nova
         const mode = pend ? pend.mode : (u.dailyMode === 'fim' ? 'fim' : 'inicio');
