@@ -8,7 +8,7 @@ const CONFIG = {
 };
 
 const PALETTE = ['#22C9EF', '#EE3B8B', '#7ED321', '#FFD447', '#E24E3D'];
-const ROLE_COLORS = { 'Programação': '#22C9EF', 'Arte': '#EE3B8B', 'Game Design': '#FFD447' };
+const ROLE_COLORS = { 'Developer': '#22C9EF', 'Arte3D': '#EE3B8B' };
 const NO_ROLE = 'Time';
 
 // ==========================================================
@@ -540,22 +540,9 @@ function renderDashPage(data) {
     : '';
   const memberChips = `<button class="chip ${!state.member ? 'active' : ''}" onclick="selectMember(null)">Todos</button>` +
     scopeUsers.map(u => `<button class="chip ${state.member === u._id ? 'active' : ''}" onclick="selectMember('${u._id}')"><span class="dot" style="background:${colorForUser(u._id)}"></span>${escapeHtml(u.username)}</button>`).join('');
-  // tags: top 5 + botão pra expandir o resto (mantém a linha limpa)
-  const tags = extractTags(data.reports.filter(r => scopeUsers.find(u => u._id === r.userId)));
-  const TAG_LIMIT = 5;
-  const shown = state.tagsExpanded ? tags : tags.slice(0, TAG_LIMIT);
-  // garante que a tag ativa sempre aparece
-  if (state.tag && !shown.find(([t]) => t === state.tag)) {
-    const hit = tags.find(([t]) => t === state.tag);
-    if (hit) shown.push(hit);
-  }
-  const tagChip = ([tag, cnt]) =>
-    `<button class="chip ${state.tag === tag ? 'active' : ''}" onclick="selectTag('${escapeHtml(tag)}')"><span class="sq" style="background:${colorForTag(tag)}"></span>${escapeHtml(tag)} <span class="cnt">${cnt}</span></button>`;
-  const moreBtn = tags.length > TAG_LIMIT
-    ? `<button class="chip" onclick="toggleTags()">${state.tagsExpanded ? '− menos' : `+${tags.length - TAG_LIMIT}`}</button>`
-    : '';
-  const tagChips = tags.length ? '<span class="filters-divider"></span>' + shown.map(tagChip).join('') + moreBtn : '';
-  const filtersHtml = `<div class="filters-row rg-in">${roleChips}${memberChips}${tagChips}</div>`;
+  // (chips de tag de projeto removidos por ora — vamos repensar como apresentá-las;
+  //  os badges [TAG] continuam aparecendo dentro dos relatórios)
+  const filtersHtml = `<div class="filters-row rg-in">${roleChips}${memberChips}</div>`;
 
   // ---- perfil ou lista ----
   let mainHtml;
