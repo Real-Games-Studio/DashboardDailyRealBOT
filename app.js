@@ -809,78 +809,146 @@ async function initWeekly() {
 // ==========================================================
 // PÁGINA: MEMBROS
 // ==========================================================
+// ---- estado "aplicando" do toggle de formato (persiste em localStorage) ----
+const PENDING_MODE_KEY = 'dailybot_pending_mode';
+const PENDING_MODE_TTL = 10 * 60 * 1000; // desiste depois de 10min (algo deu errado no bot)
+let _membersPollTimer = null;
+const _justConfirmed = new Set();
+
+function getPendingModes() {
+  try { return JSON.parse(localStorage.getItem(PENDING_MODE_KEY)) || {}; } catch (_) { return {}; }
+}
+function savePendingModes(p) { localStorage.setItem(PENDING_MODE_KEY, JSON.stringify(p)); }
+
 async function initMembers() {
   mountChrome('users.html');
   const content = document.getElementById('content');
   content.innerHTML = '<div class="loading"><div class="spinner"></div><p>Carregando...</p></div>';
+  await refreshMembers();
+}
+
+async function refreshMembers() {
+  const content = document.getElementById('content');
   try {
     const data = await loadAllData();
     _modalUsers = data.users;
-    const users = data.users;
-    document.getElementById('subtitle').textContent =
-      `${users.length} membro${users.length !== 1 ? 's' : ''} · gestão via bot no Discord`;
 
-    if (!users.length) {
-      content.innerHTML = '<div class="empty-state boxed"><div class="icon">👥</div><p>Nenhum membro ainda.</p></div>';
-      return;
+    // reconcilia pendências: bot aplicou? (dailyMode no Firebase == escolha) → confirma
+    const pending = getPendingModes();
+    let changed = false;
+    for (const [uid, p] of Object.entries(pending)) {
+      const u = data.users.find(x => x._id === uid);
+      const cur = u && (u.dailyMode === 'fim' ? 'fim' : 'inicio');
+      if (!u || cur === p.mode || Date.now() - p.ts > PENDING_MODE_TTL) {
+        if (u && cur === p.mode) {
+          _justConfirmed.add(uid);
+          setTimeout(() => { _justConfirmed.delete(uid); refreshMembers(); }, 5000);
+        }
+        delete pending[uid];
+        changed = true;
+      }
     }
+    if (changed) savePendingModes(pending);
 
-    const byRole = new Map();
-    for (const u of users) {
-      const role = u.role || NO_ROLE;
-      if (!byRole.has(role)) byRole.set(role, []);
-      byRole.get(role).push(u);
+    renderMembersPage(data, pending);
+
+    // enquanto houver pendência, checa o Firebase a cada 8s
+    const hasPending = Object.keys(pending).length > 0;
+    if (hasPending && !_membersPollTimer) {
+      _membersPollTimer = setInterval(refreshMembers, 8000);
+    } else if (!hasPending && _membersPollTimer) {
+      clearInterval(_membersPollTimer);
+      _membersPollTimer = null;
     }
-    const roleOrder = [...byRole.keys()].sort((a, b) => a === NO_ROLE ? 1 : b === NO_ROLE ? -1 : a.localeCompare(b));
-
-    content.innerHTML = roleOrder.map(role => {
-      const c = colorForRole(role);
-      const cards = byRole.get(role)
-        .sort((a, b) => a.username.localeCompare(b.username))
-        .map((u, i) => {
-          const streak = streakFor(u._id, data.reports);
-          const mode = u.dailyMode === 'fim' ? 'fim' : 'inicio';
-          const joined = u.createdAt ? new Date(u.createdAt).toLocaleDateString('pt-BR') : '—';
-          return `
-          <div class="user-card-rg rg-in" style="animation-delay:${Math.min(i, 8) * 45}ms">
-            <div class="uc-head">
-              ${avatarHtml(u, 'uc-avatar')}
-              <div style="min-width:0">
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                  <span class="uc-name">${escapeHtml(u.username)}</span>
-                  ${u.active !== false ? '<span class="badge-active-rg">● ATIVO</span>' : '<span class="badge-inactive-rg">● INATIVO</span>'}
-                  <span class="streak-badge ${streak >= 5 ? 'hot' : ''}" style="font-size:9px;padding:2px 8px">🔥 ${streak}</span>
-                </div>
-                <div class="uc-meta">ID ${escapeHtml(u.discordId)}</div>
-                <div class="uc-meta">DESDE ${joined}</div>
-              </div>
-            </div>
-            <div class="daily-mode-block">
-              <span class="t-mono" style="font-size:9px">FORMATO DA DAILY</span>
-              <div class="daily-mode-toggle">
-                <button class="${mode === 'inicio' ? 'on-inicio' : ''}" onclick="setDailyMode('${u._id}','inicio')">☀ MANHÃ</button>
-                <button class="${mode === 'fim' ? 'on-fim' : ''}" onclick="setDailyMode('${u._id}','fim')">🌙 FIM DO DIA</button>
-              </div>
-              <div class="daily-mode-desc">${mode === 'inicio'
-                ? 'DM às 9h · "o que fez ontem?" + "o que vai fazer hoje?"'
-                : 'DM às 18h · "o que fez hoje?" + "o que vai fazer amanhã?"'}</div>
-            </div>
-            <a class="btn-hist" href="dashboard.html?user=${u._id}">VER HISTÓRICO ▸</a>
-          </div>`;
-        }).join('');
-      return `<div class="role-head"><span class="sq" style="background:${c}"></span><span style="color:${c}">${escapeHtml(role)}</span></div><div class="users-grid">${cards}</div>`;
-    }).join('');
   } catch (err) {
     content.innerHTML = `<div class="empty-state boxed"><div class="icon">⚠️</div><p>Erro ao carregar.<br>${escapeHtml(err.message)}</p></div>`;
   }
 }
 
+function renderMembersPage(data, pending) {
+  const content = document.getElementById('content');
+  const users = data.users;
+  document.getElementById('subtitle').textContent =
+    `${users.length} membro${users.length !== 1 ? 's' : ''} · gestão via bot no Discord`;
+
+  if (!users.length) {
+    content.innerHTML = '<div class="empty-state boxed"><div class="icon">👥</div><p>Nenhum membro ainda.</p></div>';
+    return;
+  }
+
+  const byRole = new Map();
+  for (const u of users) {
+    const role = u.role || NO_ROLE;
+    if (!byRole.has(role)) byRole.set(role, []);
+    byRole.get(role).push(u);
+  }
+  const roleOrder = [...byRole.keys()].sort((a, b) => a === NO_ROLE ? 1 : b === NO_ROLE ? -1 : a.localeCompare(b));
+
+  content.innerHTML = roleOrder.map(role => {
+    const c = colorForRole(role);
+    const cards = byRole.get(role)
+      .sort((a, b) => a.username.localeCompare(b.username))
+      .map((u, i) => {
+        const streak = streakFor(u._id, data.reports);
+        const pend = pending[u._id];
+        // otimista: se tem pendência, já mostra a escolha nova
+        const mode = pend ? pend.mode : (u.dailyMode === 'fim' ? 'fim' : 'inicio');
+        const applying = !!pend;
+        const confirmed = _justConfirmed.has(u._id);
+        const joined = u.createdAt ? new Date(u.createdAt).toLocaleDateString('pt-BR') : '—';
+        const dis = applying ? 'disabled' : '';
+        let statusHtml;
+        if (applying) {
+          statusHtml = `<div class="mode-status applying">⧗ AGUARDANDO O BOT APLICAR (~1 MIN) — dá pra trocar de novo depois de confirmado</div>`;
+        } else if (confirmed) {
+          statusHtml = `<div class="mode-status done">✓ APLICADO!</div>`;
+        } else {
+          statusHtml = `<div class="daily-mode-desc">${mode === 'inicio'
+            ? 'DM às 9h · "o que fez ontem?" + "o que vai fazer hoje?"'
+            : 'DM às 18h · "o que fez hoje?" + "o que vai fazer amanhã?"'}</div>`;
+        }
+        return `
+        <div class="user-card-rg rg-in" style="animation-delay:${Math.min(i, 8) * 45}ms">
+          <div class="uc-head">
+            ${avatarHtml(u, 'uc-avatar')}
+            <div style="min-width:0">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span class="uc-name">${escapeHtml(u.username)}</span>
+                ${u.active !== false ? '<span class="badge-active-rg">● ATIVO</span>' : '<span class="badge-inactive-rg">● INATIVO</span>'}
+                <span class="streak-badge ${streak >= 5 ? 'hot' : ''}" style="font-size:9px;padding:2px 8px">🔥 ${streak}</span>
+              </div>
+              <div class="uc-meta">ID ${escapeHtml(u.discordId)}</div>
+              <div class="uc-meta">DESDE ${joined}</div>
+            </div>
+          </div>
+          <div class="daily-mode-block">
+            <span class="t-mono" style="font-size:9px">FORMATO DA DAILY</span>
+            <div class="daily-mode-toggle">
+              <button ${dis} class="${mode === 'inicio' ? 'on-inicio' : ''}" onclick="setDailyMode('${u._id}','inicio')">☀ MANHÃ</button>
+              <button ${dis} class="${mode === 'fim' ? 'on-fim' : ''}" onclick="setDailyMode('${u._id}','fim')">🌙 FIM DO DIA</button>
+            </div>
+            ${statusHtml}
+          </div>
+          <a class="btn-hist" href="dashboard.html?user=${u._id}">VER HISTÓRICO ▸</a>
+        </div>`;
+      }).join('');
+    return `<div class="role-head"><span class="sq" style="background:${c}"></span><span style="color:${c}">${escapeHtml(role)}</span></div><div class="users-grid">${cards}</div>`;
+  }).join('');
+}
+
 async function setDailyMode(uid, mode) {
+  const u = _modalUsers.find(x => x._id === uid);
+  const cur = u && (u.dailyMode === 'fim' ? 'fim' : 'inicio');
+  if (cur === mode) return;                 // já está nesse modo
+  if (getPendingModes()[uid]) return;       // travado: aguardando o bot aplicar
   try {
     await queueWrite('dailymode', { userId: uid, dailyMode: mode });
-    alert('✓ Pedido enviado! O bot aplica em instantes.');
+    const p = getPendingModes();
+    p[uid] = { mode, ts: Date.now() };
+    savePendingModes(p);
+    refreshMembers();
   } catch (e) {
-    alert('A troca de formato pelo site ainda não está ativada — em breve. Por enquanto fale com o Matheus.');
+    alert('A troca de formato pelo site não está ativada — fale com o Matheus.');
   }
 }
 

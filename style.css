@@ -608,6 +608,13 @@ h1.page-h {
 .daily-mode-toggle button.on-inicio { background: var(--cyan); color: #000; font-weight: 700; }
 .daily-mode-toggle button.on-fim { background: var(--mag); color: #000; font-weight: 700; }
 .daily-mode-desc { font-size: .72rem; color: var(--dim); margin-top: 8px; line-height: 1.5; }
+.daily-mode-toggle button:disabled { cursor: not-allowed; opacity: .75; }
+.mode-status {
+  font-family: var(--font-mono); font-size: 9px;
+  letter-spacing: .08em; margin-top: 8px; line-height: 1.6;
+}
+.mode-status.applying { color: var(--yel); }
+.mode-status.done { color: var(--grn); }
 .btn-hist {
   display: inline-block; margin-top: 14px;
   font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em;
