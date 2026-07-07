@@ -38,17 +38,22 @@ async function fetchPath(path) {
   return (await res.json()) || {};
 }
 
+let _lastData = null;
+
 async function loadAllData() {
-  const [usersData, reportsData, weekliesData] = await Promise.all([
+  const [usersData, reportsData, weekliesData, projectsData] = await Promise.all([
     fetchPath('users'),
     fetchPath('reports'),
     fetchPath('weeklies').catch(() => ({})),
+    fetchPath('projects').catch(() => ({})),
   ]);
-  return {
+  _lastData = {
     users: usersData.users || [],
     reports: reportsData.reports || [],
     weeklies: weekliesData.weeklies || [],
+    projects: projectsData.projects || [],
   };
+  return _lastData;
 }
 
 // Escrita em fila: só funciona quando as regras do Firebase liberarem /queue/*.
@@ -159,6 +164,31 @@ function extractTags(reports) {
   }
   return [...counts.entries()].sort((a, b) => b[1] - a[1]);
 }
+// ---- projetos canônicos ----
+function normTag(s) { return (s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+function activeProjects(data) { return (data.projects || []).filter(p => p.active !== false); }
+function projectPaths(data) {
+  const paths = [];
+  for (const p of activeProjects(data)) {
+    const subs = p.subs || [];
+    if (subs.length) subs.forEach(s => paths.push(`${p.name}/${s}`));
+    else paths.push(p.name);
+  }
+  return paths;
+}
+// relatório pertence ao projeto se: campo canônico bate, OU alguma [TAG] digitada
+// normalizada começa com o nome do projeto (CARNAVAL-QUIZ ~ CARNAVAL_QUIZ ~ CARNAVAL/QUIZ)
+function reportMatchesProject(r, projName) {
+  const n = normTag(projName);
+  if ((r.projects || []).some(p => normTag(String(p).split('/')[0]) === n)) return true;
+  for (const field of [r.yesterday, r.today]) {
+    for (const ln of parseLines(field)) {
+      if (ln.tag && normTag(ln.tag).startsWith(n)) return true;
+    }
+  }
+  return false;
+}
+
 function tagBadge(tag) {
   const c = colorForTag(tag);
   return `<span class="tag-badge" style="background:${c}1F;color:${c}">${escapeHtml(tag.toUpperCase())}</span>`;
@@ -265,6 +295,7 @@ const NAV_ITEMS = [
   { href: 'dashboard.html', label: 'Dashboard', glyph: 'target', color: '#22C9EF' },
   { href: 'timeline.html', label: 'Timeline', glyph: 'bars', color: '#E24E3D' },
   { href: 'weekly.html', label: 'Weekly', glyph: 'play', color: '#EE3B8B' },
+  { href: 'projetos.html', label: 'Projetos', glyph: 'hex', color: '#FFD447' },
   { href: 'users.html', label: 'Membros', glyph: 'dots', color: '#22C9EF' },
   { href: 'register.html', label: 'Registrar', glyph: 'hex', color: '#FFD447' },
 ];
@@ -345,17 +376,40 @@ function renderDailyModal() {
         <label>Impedimentos (opcional)</label>
         <input type="text" id="modal-blockers" placeholder="deixe vazio se não houver" />
       </div>
+      <div class="modal-field" id="modal-projects-field" style="display:none">
+        <label>🏷 Projetos que você tocou (opcional)</label>
+        <div class="who-chips" id="modal-projects"></div>
+      </div>
       <button class="btn-send-daily" id="modal-send" onclick="submitDailyModal()">Enviar Daily ▸</button>
       <div class="modal-msg" id="modal-msg"></div>
     </div>
   </div>`;
 }
 
+const _modalProjSel = new Set();
+
 function openDailyModal() {
   const modal = document.getElementById('daily-modal');
   if (!modal) return;
   modal.classList.add('visible');
   renderModalChips();
+  renderModalProjects();
+}
+
+function renderModalProjects() {
+  const field = document.getElementById('modal-projects-field');
+  const box = document.getElementById('modal-projects');
+  if (!field || !box) return;
+  const paths = _lastData ? projectPaths(_lastData) : [];
+  if (!paths.length) { field.style.display = 'none'; return; }
+  field.style.display = '';
+  box.innerHTML = paths.map(p =>
+    `<button class="chip ${_modalProjSel.has(p) ? 'active' : ''}" onclick="toggleModalProject('${escapeHtml(p)}')"><span class="sq" style="background:${colorForTag(p.split('/')[0])}"></span>${escapeHtml(p)}</button>`
+  ).join('');
+}
+function toggleModalProject(p) {
+  if (_modalProjSel.has(p)) _modalProjSel.delete(p); else _modalProjSel.add(p);
+  renderModalProjects();
 }
 function closeDailyModal() {
   const modal = document.getElementById('daily-modal');
@@ -400,7 +454,11 @@ async function submitDailyModal() {
   btn.disabled = true;
   msg.className = 'modal-msg'; msg.textContent = 'enviando...';
   try {
-    await queueWrite('dailies', { userId: uid, date: todayStr(), yesterday: yesterday || null, today: today || null, blockers: blockers || null });
+    await queueWrite('dailies', {
+      userId: uid, date: todayStr(),
+      yesterday: yesterday || null, today: today || null, blockers: blockers || null,
+      projects: _modalProjSel.size ? [..._modalProjSel] : null,
+    });
     msg.className = 'modal-msg ok';
     msg.textContent = '✓ enviado! o bot processa em instantes.';
     setTimeout(() => { closeDailyModal(); window.location.reload(); }, 1800);
@@ -443,7 +501,7 @@ async function initLogin() {
 // ==========================================================
 // PÁGINA: DASHBOARD
 // ==========================================================
-const state = { role: null, member: null, tag: null };
+const state = { role: null, member: null, project: null };
 
 async function initDashboard() {
   mountChrome('dashboard.html');
@@ -471,9 +529,7 @@ function reportsInScope(data) {
   const scopeIds = new Set(usersInScope(data).map(u => u._id));
   let rs = data.reports.filter(r => scopeIds.has(r.userId));
   if (state.member) rs = rs.filter(r => r.userId === state.member);
-  if (state.tag) {
-    rs = rs.filter(r => [r.yesterday, r.today].some(f => parseLines(f).some(l => l.tag && l.tag.toUpperCase() === state.tag)));
-  }
+  if (state.project) rs = rs.filter(r => reportMatchesProject(r, state.project));
   return rs;
 }
 
@@ -549,9 +605,13 @@ function renderDashPage(data) {
     : '';
   const memberChips = `<button class="chip ${!state.member ? 'active' : ''}" onclick="selectMember(null)">Todos</button>` +
     scopeUsers.map(u => `<button class="chip ${state.member === u._id ? 'active' : ''}" onclick="selectMember('${u._id}')"><span class="dot" style="background:${colorForUser(u._id)}"></span>${escapeHtml(u.username)}</button>`).join('');
-  // (chips de tag de projeto removidos por ora — vamos repensar como apresentá-las;
-  //  os badges [TAG] continuam aparecendo dentro dos relatórios)
-  const filtersHtml = `<div class="filters-row rg-in">${roleChips}${memberChips}</div>`;
+  // chips de projeto CANÔNICOS (registro em /projects, gerido na página Projetos)
+  const scopeIds = new Set(scopeUsers.map(u => u._id));
+  const projChips = activeProjects(data).map(p => {
+    const cnt = data.reports.filter(r => scopeIds.has(r.userId) && reportMatchesProject(r, p.name)).length;
+    return `<button class="chip ${state.project === p.name ? 'active' : ''}" onclick="selectProject('${escapeHtml(p.name)}')"><span class="sq" style="background:${colorForTag(p.name)}"></span>${escapeHtml(p.name)} <span class="cnt">${cnt}</span></button>`;
+  }).join('');
+  const filtersHtml = `<div class="filters-row rg-in">${roleChips}${memberChips}${projChips ? '<span class="filters-divider"></span>' + projChips : ''}</div>`;
 
   // ---- perfil ou lista ----
   let mainHtml;
@@ -693,12 +753,8 @@ function selectMember(id) {
   }
   renderDashPage(window._dashData);
 }
-function selectTag(tag) {
-  state.tag = state.tag === tag ? null : tag;
-  renderDashPage(window._dashData);
-}
-function toggleTags() {
-  state.tagsExpanded = !state.tagsExpanded;
+function selectProject(name) {
+  state.project = state.project === name ? null : name;
   renderDashPage(window._dashData);
 }
 
@@ -963,6 +1019,118 @@ async function setDailyMode(uid, mode) {
 }
 
 // ==========================================================
+// PÁGINA: PROJETOS (gestão do registro canônico)
+// ==========================================================
+let _projPollUntil = 0;
+let _projPollTimer = null;
+
+async function initProjects() {
+  mountChrome('projetos.html');
+  const content = document.getElementById('content');
+  content.innerHTML = '<div class="loading"><div class="spinner"></div><p>Carregando...</p></div>';
+  await refreshProjects();
+}
+
+async function refreshProjects() {
+  const content = document.getElementById('content');
+  try {
+    const data = await loadAllData();
+    _modalUsers = data.users;
+    renderProjectsPage(data);
+    if (Date.now() > _projPollUntil && _projPollTimer) {
+      clearInterval(_projPollTimer);
+      _projPollTimer = null;
+    }
+  } catch (err) {
+    content.innerHTML = `<div class="empty-state boxed"><div class="icon">⚠️</div><p>Erro ao carregar.<br>${escapeHtml(err.message)}</p></div>`;
+  }
+}
+
+function _startProjPoll() {
+  _projPollUntil = Date.now() + 90 * 1000;
+  if (!_projPollTimer) _projPollTimer = setInterval(refreshProjects, 6000);
+}
+
+function renderProjectsPage(data) {
+  const content = document.getElementById('content');
+  const projects = (data.projects || []).filter(p => p.active !== false);
+  const applying = Date.now() < _projPollUntil;
+
+  const formHtml = `
+    <div class="panel" style="margin-bottom:20px">
+      <div class="panel-label">${GLYPHS.hex} NOVO PROJETO</div>
+      <div style="display:grid;grid-template-columns:1fr 180px 1fr auto;gap:10px;align-items:end">
+        <div class="modal-field" style="margin:0"><label>Nome</label><input type="text" id="proj-name" placeholder="ex: CARNAVAL" /></div>
+        <div class="modal-field" style="margin:0"><label>Área</label>
+          <input type="text" id="proj-area" list="area-list" placeholder="Developer" />
+          <datalist id="area-list"><option value="Developer"></option><option value="Arte3D"></option></datalist>
+        </div>
+        <div class="modal-field" style="margin:0"><label>Subprojetos (vírgula, opcional)</label><input type="text" id="proj-subs" placeholder="QUIZ, VIDEO" /></div>
+        <button class="btn-daily" style="height:42px" onclick="submitProject()">+ Adicionar</button>
+      </div>
+      <div class="mode-status ${applying ? 'applying' : ''}" id="proj-status">${applying ? '⧗ ALTERAÇÃO ENVIADA — o bot aplica em ~1 min' : ''}</div>
+    </div>`;
+
+  let listHtml;
+  if (!projects.length) {
+    listHtml = '<div class="empty-state boxed"><div class="icon">🏷</div><p>Nenhum projeto cadastrado ainda.<br>Adicione o primeiro acima — ele vira opção no dropdown da daily e filtro no dashboard.</p></div>';
+  } else {
+    const byArea = new Map();
+    for (const p of projects) {
+      const a = p.area || 'Sem área';
+      if (!byArea.has(a)) byArea.set(a, []);
+      byArea.get(a).push(p);
+    }
+    listHtml = [...byArea.keys()].sort().map(area => {
+      const c = colorForRole(area);
+      const cards = byArea.get(area).sort((a, b) => a.name.localeCompare(b.name)).map(p => `
+        <div class="user-card-rg rg-in">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="sq" style="width:12px;height:12px;border-radius:3px;background:${colorForTag(p.name)}"></span>
+            <strong style="flex:1">${escapeHtml(p.name)}</strong>
+            <button class="btn-logout-rg" onclick="archiveProject('${escapeHtml(p.name)}')" title="Arquivar (some do dropdown e dos filtros)">ARQUIVAR</button>
+          </div>
+          ${(p.subs || []).length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">${p.subs.map(s => `<span class="tag-badge" style="background:${colorForTag(p.name)}1F;color:${colorForTag(p.name)}">${escapeHtml(s)}</span>`).join('')}</div>` : ''}
+          <div class="uc-meta" style="margin-top:10px">na daily aparece como: ${(p.subs || []).length ? p.subs.map(s => `${escapeHtml(p.name)}/${escapeHtml(s)}`).join(' · ') : escapeHtml(p.name)}</div>
+        </div>`).join('');
+      return `<div class="role-head"><span class="sq" style="background:${c}"></span><span style="color:${c}">${escapeHtml(area)}</span></div><div class="users-grid">${cards}</div>`;
+    }).join('');
+  }
+
+  content.innerHTML = formHtml + listHtml;
+}
+
+async function submitProject() {
+  const name = (document.getElementById('proj-name').value || '').trim().toUpperCase();
+  const area = (document.getElementById('proj-area').value || '').trim();
+  const subs = (document.getElementById('proj-subs').value || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+  const status = document.getElementById('proj-status');
+  if (!name) { status.className = 'mode-status applying'; status.textContent = '▸ dá um nome pro projeto'; return; }
+  try {
+    await queueWrite('projects', { action: 'add', name, area: area || null, subs });
+    _startProjPoll();
+    status.className = 'mode-status applying';
+    status.textContent = '⧗ ALTERAÇÃO ENVIADA — o bot aplica em ~1 min';
+    document.getElementById('proj-name').value = '';
+    document.getElementById('proj-subs').value = '';
+  } catch (e) {
+    status.className = 'mode-status applying';
+    status.textContent = '▸ envio não ativado — regras do Firebase precisam liberar /queue/projects';
+  }
+}
+
+async function archiveProject(name) {
+  if (!confirm(`Arquivar "${name}"? Ele some do dropdown da daily e dos filtros (histórico continua).`)) return;
+  try {
+    await queueWrite('projects', { action: 'archive', name });
+    _startProjPoll();
+    refreshProjects();
+  } catch (e) {
+    alert('Envio não ativado — regras do Firebase precisam liberar /queue/projects.');
+  }
+}
+
+// ==========================================================
 // ROUTER
 // ==========================================================
 document.addEventListener('DOMContentLoaded', () => {
@@ -975,4 +1143,5 @@ document.addEventListener('DOMContentLoaded', () => {
   else if (page === 'timeline') initTimeline();
   else if (page === 'weekly') initWeekly();
   else if (page === 'users') initMembers();
+  else if (page === 'projetos') initProjects();
 });
