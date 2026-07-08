@@ -605,15 +605,25 @@ function renderDashPage(data) {
       roles.map(r => `<button class="chip ${state.role === r ? 'active' : ''}" onclick="selectRole('${escapeHtml(r)}')"><span class="sq" style="background:${colorForRole(r)}"></span>${escapeHtml(r)}</button>`).join('') +
       '<span class="filters-divider"></span>'
     : '';
-  const memberChips = `<button class="chip ${!state.member ? 'active' : ''}" onclick="selectMember(null)">Todos</button>` +
-    scopeUsers.map(u => `<button class="chip ${state.member === u._id ? 'active' : ''}" onclick="selectMember('${u._id}')"><span class="dot" style="background:${colorForUser(u._id)}"></span>${escapeHtml(u.username)}</button>`).join('');
-  // chips de projeto CANÔNICOS (registro em /projects, gerido na página Projetos)
+  // membro vira DROPDOWN (clicar no avatar/nome na lista também filtra)
+  const memberSelect = `
+    <select class="filter-select" onchange="selectMember(this.value || null)">
+      <option value="">Todos os membros</option>
+      ${scopeUsers.map(u => `<option value="${u._id}" ${state.member === u._id ? 'selected' : ''}>${escapeHtml(u.username)}</option>`).join('')}
+    </select>`;
+  // chips de projeto CANÔNICOS — contagem respeita a pessoa selecionada;
+  // com pessoa escolhida, só aparecem os projetos QUE ELA tocou
   const scopeIds = new Set(scopeUsers.map(u => u._id));
+  const baseReports = data.reports.filter(r =>
+    scopeIds.has(r.userId) && (!state.member || r.userId === state.member));
   const projChips = activeProjects(data).map(p => {
-    const cnt = data.reports.filter(r => scopeIds.has(r.userId) && reportMatchesProject(r, p.name)).length;
-    return `<button class="chip ${state.project === p.name ? 'active' : ''}" onclick="selectProject('${escapeHtml(p.name)}')"><span class="sq" style="background:${colorForTag(p.name)}"></span>${escapeHtml(p.name)} <span class="cnt">${cnt}</span></button>`;
-  }).join('');
-  const filtersHtml = `<div class="filters-row rg-in">${roleChips}${memberChips}${projChips ? '<span class="filters-divider"></span>' + projChips : ''}</div>`;
+    const cnt = baseReports.filter(r => reportMatchesProject(r, p.name)).length;
+    return { p, cnt };
+  }).filter(({ p, cnt }) => !state.member || cnt > 0 || state.project === p.name)
+    .map(({ p, cnt }) =>
+      `<button class="chip ${state.project === p.name ? 'active' : ''}" onclick="selectProject('${escapeHtml(p.name)}')"><span class="sq" style="background:${colorForTag(p.name)}"></span>${escapeHtml(p.name)} <span class="cnt">${cnt}</span></button>`
+    ).join('');
+  const filtersHtml = `<div class="filters-row rg-in">${roleChips}${memberSelect}${projChips ? '<span class="filters-divider"></span>' + projChips : ''}</div>`;
 
   // ---- perfil ou lista ----
   let mainHtml;
@@ -736,9 +746,11 @@ function renderProfile(user, data) {
       </div>
     </div>
 
-    <div class="panel-label" style="margin-bottom:10px">${GLYPHS.bars} HISTÓRICO</div>
+    <div class="panel-label" style="margin-bottom:10px">${GLYPHS.bars} HISTÓRICO${state.project ? ` · FILTRADO: <span style="color:${colorForTag(state.project)}">${escapeHtml(state.project)}</span>` : ''}</div>
     <div class="reports-table">
-      ${reports.slice(0, 40).map((r, i) => reportRowHtml(r, userMap, i)).join('') || '<div class="empty-state boxed"><p>Sem relatórios ainda.</p></div>'}
+      ${(state.project ? reports.filter(r => reportMatchesProject(r, state.project)) : reports)
+        .slice(0, 40).map((r, i) => reportRowHtml(r, userMap, i)).join('')
+        || `<div class="empty-state boxed"><p>${state.project ? 'Nenhum relatório desse projeto.' : 'Sem relatórios ainda.'}</p></div>`}
     </div>
   </div>`;
 }

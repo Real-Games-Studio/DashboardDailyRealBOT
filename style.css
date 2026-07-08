@@ -360,6 +360,17 @@ h1.page-h {
   display: inline-flex; align-items: center; gap: 7px;
   transition: border-color .15s, color .15s;
 }
+.filter-select {
+  background: var(--panel); border: 1px solid var(--line2);
+  border-radius: 8px; padding: 8px 12px;
+  color: var(--txt);
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: .08em; text-transform: uppercase;
+  outline: none; cursor: pointer;
+}
+.filter-select:hover { border-color: var(--line-hover); }
+.filter-select:focus { border-color: var(--cyan); }
+.filter-select option { background: var(--panel); color: var(--txt); }
 .chip:hover { border-color: var(--line-hover); color: var(--txt); }
 .chip.active { color: var(--txt); border-color: var(--cyan); background: rgba(34, 201, 239, .08); }
 .chip .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
