@@ -25,7 +25,8 @@
   --font-mono: 'JetBrains Mono', monospace;
 }
 
-::selection { background: var(--cyan); color: #000; }
+/* cor de seleção acompanha a cor da aba ativa (setada pelo mountChrome) */
+::selection { background: var(--sel, var(--cyan)); color: #000; }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: var(--bg); }

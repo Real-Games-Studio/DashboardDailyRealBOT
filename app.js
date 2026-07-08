@@ -473,6 +473,9 @@ async function submitDailyModal() {
 
 // injeta header/modal/footer nas páginas do app
 function mountChrome(activePage) {
+  // seleção de texto na cor da aba ativa (mesma cor do underline)
+  const navItem = NAV_ITEMS.find(it => it.href === activePage);
+  if (navItem) document.documentElement.style.setProperty('--sel', navItem.color);
   document.body.insertAdjacentHTML('afterbegin', renderHeader(activePage));
   document.body.insertAdjacentHTML('beforeend', renderDailyModal());
   document.body.insertAdjacentHTML('beforeend', renderFooter());
@@ -1050,8 +1053,43 @@ function savePendingProjects(list) { localStorage.setItem(PENDING_PROJ_KEY, JSON
 async function initProjects() {
   mountChrome('projetos.html');
   const content = document.getElementById('content');
-  content.innerHTML = '<div class="loading"><div class="spinner"></div><p>Carregando...</p></div>';
+  // form e lista em containers separados: o poll SÓ re-renderiza a lista,
+  // então o que você está digitando no form nunca é apagado
+  content.innerHTML = `
+    <div id="proj-form-mount"></div>
+    <div id="proj-list-mount"><div class="loading"><div class="spinner"></div><p>Carregando...</p></div></div>`;
+  renderProjectsForm();
   await refreshProjects();
+}
+
+function renderProjectsForm() {
+  const mount = document.getElementById('proj-form-mount');
+  if (!mount) return;
+  mount.innerHTML = `
+    <div class="panel" style="margin-bottom:20px">
+      <div class="panel-label">${GLYPHS.hex} ${_projEditing ? `EDITANDO: ${escapeHtml(_projEditing)}` : 'NOVO PROJETO'}</div>
+      <div style="display:grid;grid-template-columns:1fr 180px 1fr auto;gap:10px;align-items:end" class="proj-form">
+        <div class="modal-field" style="margin:0"><label>Nome</label><input type="text" id="proj-name" placeholder="ex: CARNAVAL" ${_projEditing ? 'readonly style="opacity:.6"' : ''} /></div>
+        <div class="modal-field" style="margin:0"><label>Área</label>
+          <input type="text" id="proj-area" list="area-list" placeholder="Developer" />
+          <datalist id="area-list"><option value="Developer"></option><option value="Arte3D"></option></datalist>
+        </div>
+        <div class="modal-field" style="margin:0"><label>Subprojetos (vírgula, opcional)</label><input type="text" id="proj-subs" placeholder="QUIZ, VIDEO" /></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-daily" style="height:42px" onclick="submitProject()">${_projEditing ? '✓ Salvar' : '+ Adicionar'}</button>
+          ${_projEditing ? '<button class="btn-logout-rg" style="height:42px" onclick="cancelEditProject()">CANCELAR</button>' : ''}
+        </div>
+      </div>
+      <div class="mode-status" id="proj-status"></div>
+    </div>`;
+  if (_projEditing && _lastData) {
+    const p = mergedProjects(_lastData, getPendingProjects()).find(x => normTag(x.name) === normTag(_projEditing));
+    if (p) {
+      document.getElementById('proj-name').value = p.name;
+      document.getElementById('proj-area').value = p.area || '';
+      document.getElementById('proj-subs').value = (p.subs || []).join(', ');
+    }
+  }
 }
 
 async function refreshProjects() {
@@ -1101,26 +1139,9 @@ function mergedProjects(data, pending) {
 }
 
 function renderProjectsPage(data, pending) {
-  const content = document.getElementById('content');
+  const content = document.getElementById('proj-list-mount');
+  if (!content) return;
   const projects = mergedProjects(data, pending);
-
-  const formHtml = `
-    <div class="panel" style="margin-bottom:20px">
-      <div class="panel-label">${GLYPHS.hex} ${_projEditing ? `EDITANDO: ${escapeHtml(_projEditing)}` : 'NOVO PROJETO'}</div>
-      <div style="display:grid;grid-template-columns:1fr 180px 1fr auto;gap:10px;align-items:end" class="proj-form">
-        <div class="modal-field" style="margin:0"><label>Nome</label><input type="text" id="proj-name" placeholder="ex: CARNAVAL" ${_projEditing ? 'readonly style="opacity:.6"' : ''} /></div>
-        <div class="modal-field" style="margin:0"><label>Área</label>
-          <input type="text" id="proj-area" list="area-list" placeholder="Developer" />
-          <datalist id="area-list"><option value="Developer"></option><option value="Arte3D"></option></datalist>
-        </div>
-        <div class="modal-field" style="margin:0"><label>Subprojetos (vírgula, opcional)</label><input type="text" id="proj-subs" placeholder="QUIZ, VIDEO" /></div>
-        <div style="display:flex;gap:8px">
-          <button class="btn-daily" style="height:42px" onclick="submitProject()">${_projEditing ? '✓ Salvar' : '+ Adicionar'}</button>
-          ${_projEditing ? '<button class="btn-logout-rg" style="height:42px" onclick="cancelEditProject()">CANCELAR</button>' : ''}
-        </div>
-      </div>
-      <div class="mode-status" id="proj-status"></div>
-    </div>`;
 
   let listHtml;
   if (!projects.length) {
@@ -1159,28 +1180,17 @@ function renderProjectsPage(data, pending) {
     }).join('');
   }
 
-  content.innerHTML = formHtml + listHtml;
-  // repõe valores do form em edição (re-render limpa os inputs)
-  if (_projEditing) {
-    const p = projects.find(x => normTag(x.name) === normTag(_projEditing));
-    if (p) {
-      document.getElementById('proj-name').value = p.name;
-      document.getElementById('proj-area').value = p.area || '';
-      document.getElementById('proj-subs').value = (p.subs || []).join(', ');
-    }
-  }
+  content.innerHTML = listHtml;
 }
 
 function editProject(name) {
   _projEditing = name;
-  refreshProjectsRenderOnly();
+  renderProjectsForm();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 function cancelEditProject() {
   _projEditing = null;
-  refreshProjectsRenderOnly();
-}
-function refreshProjectsRenderOnly() {
-  if (_lastData) renderProjectsPage(_lastData, getPendingProjects());
+  renderProjectsForm();
 }
 
 async function submitProject() {
@@ -1196,6 +1206,7 @@ async function submitProject() {
     pending.push({ action, name, area: area || null, subs, ts: Date.now() });
     savePendingProjects(pending);
     _projEditing = null;
+    renderProjectsForm();  // limpa o form pro próximo cadastro
     refreshProjects();
   } catch (e) {
     status.className = 'mode-status applying';
