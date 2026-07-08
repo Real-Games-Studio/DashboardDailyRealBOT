@@ -197,8 +197,8 @@ header.rg-header {
   position: sticky; top: 0; z-index: 100;
   background: #000;
   border-bottom: 1px solid var(--line);
-  padding: 0 28px;
-  display: flex; align-items: center; gap: 20px;
+  padding: 0 18px;
+  display: flex; align-items: center; gap: 14px;
   height: 64px;
 }
 .rg-brand { display: flex; align-items: center; gap: 12px; cursor: pointer; text-decoration: none; }
@@ -212,19 +212,31 @@ header.rg-header {
   color: var(--mut); letter-spacing: .16em; text-transform: uppercase;
   margin-top: 3px; display: block;
 }
-nav.rg-nav { display: flex; gap: 2px; height: 100%; margin-left: 4px; flex: 1; overflow-x: auto; }
+nav.rg-nav {
+  display: flex; gap: 0; height: 100%; margin-left: 2px; flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;           /* Firefox: some a barra */
+}
+nav.rg-nav::-webkit-scrollbar { display: none; }  /* Chrome/Safari: some a barra */
 nav.rg-nav a {
   background: none; border: none; color: var(--txt);
   font-family: var(--font-display); font-weight: 600;
-  font-size: 16px; letter-spacing: .12em; text-transform: uppercase;
-  padding: 0 14px; display: flex; align-items: center; gap: 8px;
+  font-size: 15px; letter-spacing: .09em; text-transform: uppercase;
+  padding: 0 11px; display: flex; align-items: center; gap: 6px;
   position: relative; height: 100%;
   text-decoration: none; white-space: nowrap;
   transition: color .15s;
 }
 nav.rg-nav a:hover { color: var(--cyan); }
 nav.rg-nav a.active .nav-underline {
-  position: absolute; left: 12px; right: 12px; bottom: 0; height: 3px;
+  position: absolute; left: 10px; right: 10px; bottom: 0; height: 3px;
+  animation: rgBarIn .38s ease both;   /* underline cresce ao trocar de aba */
+  transform-origin: left;
+}
+@media (max-width: 1200px) { .hdr-date { display: none; } }
+@media (max-width: 1050px) {
+  nav.rg-nav a { font-size: 14px; padding: 0 8px; letter-spacing: .06em; }
+  .btn-daily { font-size: 13px; padding: 8px 12px; }
 }
 .btn-daily {
   background: var(--cyan); border: none; border-radius: 6px;

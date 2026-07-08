@@ -1035,8 +1035,17 @@ async function setDailyMode(uid, mode) {
 // ==========================================================
 // PÁGINA: PROJETOS (gestão do registro canônico)
 // ==========================================================
-let _projPollUntil = 0;
+// Pendências otimistas (localStorage): o projeto aparece/atualiza/some NA HORA
+// com "⧗ sincronizando"; o poll reconcilia quando o bot aplicar de verdade.
+const PENDING_PROJ_KEY = 'dailybot_pending_projects';
+const PENDING_PROJ_TTL = 10 * 60 * 1000;
 let _projPollTimer = null;
+let _projEditing = null; // nome do projeto em edição no form
+
+function getPendingProjects() {
+  try { return JSON.parse(localStorage.getItem(PENDING_PROJ_KEY)) || []; } catch (_) { return []; }
+}
+function savePendingProjects(list) { localStorage.setItem(PENDING_PROJ_KEY, JSON.stringify(list)); }
 
 async function initProjects() {
   mountChrome('projetos.html');
@@ -1050,39 +1059,67 @@ async function refreshProjects() {
   try {
     const data = await loadAllData();
     _modalUsers = data.users;
-    renderProjectsPage(data);
-    if (Date.now() > _projPollUntil && _projPollTimer) {
-      clearInterval(_projPollTimer);
-      _projPollTimer = null;
-    }
+
+    // reconcilia: bot já aplicou? remove a pendência
+    let pending = getPendingProjects();
+    const before = pending.length;
+    pending = pending.filter(pe => {
+      if (Date.now() - pe.ts > PENDING_PROJ_TTL) return false;
+      const server = (data.projects || []).find(p => normTag(p.name) === normTag(pe.name));
+      // archive aplicado quando o projeto sumiu ou ficou inativo no servidor
+      if (pe.action === 'archive') return !!(server && server.active !== false);
+      // add/update: aplicado quando existe ativo e foi tocado depois do pedido
+      if (!server || server.active === false) return true;
+      const upd = Date.parse(server.updatedAt || server.createdAt || 0);
+      return !(upd && upd >= pe.ts - 90 * 1000);
+    });
+    if (pending.length !== before) savePendingProjects(pending);
+
+    renderProjectsPage(data, pending);
+
+    if (pending.length && !_projPollTimer) _projPollTimer = setInterval(refreshProjects, 6000);
+    else if (!pending.length && _projPollTimer) { clearInterval(_projPollTimer); _projPollTimer = null; }
   } catch (err) {
     content.innerHTML = `<div class="empty-state boxed"><div class="icon">⚠️</div><p>Erro ao carregar.<br>${escapeHtml(err.message)}</p></div>`;
   }
 }
 
-function _startProjPoll() {
-  _projPollUntil = Date.now() + 90 * 1000;
-  if (!_projPollTimer) _projPollTimer = setInterval(refreshProjects, 6000);
+// mescla servidor + pendências pra visão otimista
+function mergedProjects(data, pending) {
+  const list = (data.projects || []).filter(p => p.active !== false).map(p => ({ ...p }));
+  for (const pe of pending) {
+    const i = list.findIndex(x => normTag(x.name) === normTag(pe.name));
+    if (pe.action === 'archive') {
+      if (i >= 0) list[i]._pending = 'archive';
+    } else {
+      const obj = { name: pe.name, area: pe.area, subs: pe.subs || [], _pending: pe.action };
+      if (i >= 0) list[i] = { ...list[i], ...obj };
+      else list.push(obj);
+    }
+  }
+  return list;
 }
 
-function renderProjectsPage(data) {
+function renderProjectsPage(data, pending) {
   const content = document.getElementById('content');
-  const projects = (data.projects || []).filter(p => p.active !== false);
-  const applying = Date.now() < _projPollUntil;
+  const projects = mergedProjects(data, pending);
 
   const formHtml = `
     <div class="panel" style="margin-bottom:20px">
-      <div class="panel-label">${GLYPHS.hex} NOVO PROJETO</div>
-      <div style="display:grid;grid-template-columns:1fr 180px 1fr auto;gap:10px;align-items:end">
-        <div class="modal-field" style="margin:0"><label>Nome</label><input type="text" id="proj-name" placeholder="ex: CARNAVAL" /></div>
+      <div class="panel-label">${GLYPHS.hex} ${_projEditing ? `EDITANDO: ${escapeHtml(_projEditing)}` : 'NOVO PROJETO'}</div>
+      <div style="display:grid;grid-template-columns:1fr 180px 1fr auto;gap:10px;align-items:end" class="proj-form">
+        <div class="modal-field" style="margin:0"><label>Nome</label><input type="text" id="proj-name" placeholder="ex: CARNAVAL" ${_projEditing ? 'readonly style="opacity:.6"' : ''} /></div>
         <div class="modal-field" style="margin:0"><label>Área</label>
           <input type="text" id="proj-area" list="area-list" placeholder="Developer" />
           <datalist id="area-list"><option value="Developer"></option><option value="Arte3D"></option></datalist>
         </div>
         <div class="modal-field" style="margin:0"><label>Subprojetos (vírgula, opcional)</label><input type="text" id="proj-subs" placeholder="QUIZ, VIDEO" /></div>
-        <button class="btn-daily" style="height:42px" onclick="submitProject()">+ Adicionar</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn-daily" style="height:42px" onclick="submitProject()">${_projEditing ? '✓ Salvar' : '+ Adicionar'}</button>
+          ${_projEditing ? '<button class="btn-logout-rg" style="height:42px" onclick="cancelEditProject()">CANCELAR</button>' : ''}
+        </div>
       </div>
-      <div class="mode-status ${applying ? 'applying' : ''}" id="proj-status">${applying ? '⧗ ALTERAÇÃO ENVIADA — o bot aplica em ~1 min' : ''}</div>
+      <div class="mode-status" id="proj-status"></div>
     </div>`;
 
   let listHtml;
@@ -1097,21 +1134,53 @@ function renderProjectsPage(data) {
     }
     listHtml = [...byArea.keys()].sort().map(area => {
       const c = colorForRole(area);
-      const cards = byArea.get(area).sort((a, b) => a.name.localeCompare(b.name)).map(p => `
-        <div class="user-card-rg rg-in">
+      const cards = byArea.get(area).sort((a, b) => a.name.localeCompare(b.name)).map(p => {
+        const pend = p._pending;
+        const dim = pend ? 'opacity:.45' : '';
+        const statusLine = pend === 'archive'
+          ? '<div class="mode-status applying">⧗ REMOVENDO…</div>'
+          : pend
+            ? '<div class="mode-status applying">⧗ SINCRONIZANDO — o bot confirma em ~1 min</div>'
+            : '';
+        return `
+        <div class="user-card-rg rg-in" style="${dim}">
           <div style="display:flex;align-items:center;gap:10px">
             <span class="sq" style="width:12px;height:12px;border-radius:3px;background:${colorForTag(p.name)}"></span>
             <strong style="flex:1">${escapeHtml(p.name)}</strong>
-            <button class="btn-logout-rg" onclick="archiveProject('${escapeHtml(p.name)}')" title="Arquivar (some do dropdown e dos filtros)">ARQUIVAR</button>
+            <button class="btn-logout-rg" ${pend ? 'disabled' : ''} onclick="editProject('${escapeHtml(p.name)}')" title="Editar área e subprojetos">✎</button>
+            <button class="btn-logout-rg" ${pend ? 'disabled' : ''} style="color:#E24E3D;border-color:rgba(226,78,61,.4)" onclick="archiveProject('${escapeHtml(p.name)}')" title="Excluir (some do dropdown e dos filtros; histórico continua)">✕</button>
           </div>
           ${(p.subs || []).length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">${p.subs.map(s => `<span class="tag-badge" style="background:${colorForTag(p.name)}1F;color:${colorForTag(p.name)}">${escapeHtml(s)}</span>`).join('')}</div>` : ''}
           <div class="uc-meta" style="margin-top:10px">na daily aparece como: ${(p.subs || []).length ? p.subs.map(s => `${escapeHtml(p.name)}/${escapeHtml(s)}`).join(' · ') : escapeHtml(p.name)}</div>
-        </div>`).join('');
+          ${statusLine}
+        </div>`;
+      }).join('');
       return `<div class="role-head"><span class="sq" style="background:${c}"></span><span style="color:${c}">${escapeHtml(area)}</span></div><div class="users-grid">${cards}</div>`;
     }).join('');
   }
 
   content.innerHTML = formHtml + listHtml;
+  // repõe valores do form em edição (re-render limpa os inputs)
+  if (_projEditing) {
+    const p = projects.find(x => normTag(x.name) === normTag(_projEditing));
+    if (p) {
+      document.getElementById('proj-name').value = p.name;
+      document.getElementById('proj-area').value = p.area || '';
+      document.getElementById('proj-subs').value = (p.subs || []).join(', ');
+    }
+  }
+}
+
+function editProject(name) {
+  _projEditing = name;
+  refreshProjectsRenderOnly();
+}
+function cancelEditProject() {
+  _projEditing = null;
+  refreshProjectsRenderOnly();
+}
+function refreshProjectsRenderOnly() {
+  if (_lastData) renderProjectsPage(_lastData, getPendingProjects());
 }
 
 async function submitProject() {
@@ -1120,13 +1189,14 @@ async function submitProject() {
   const subs = (document.getElementById('proj-subs').value || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
   const status = document.getElementById('proj-status');
   if (!name) { status.className = 'mode-status applying'; status.textContent = '▸ dá um nome pro projeto'; return; }
+  const action = _projEditing ? 'update' : 'add';
   try {
-    await queueWrite('projects', { action: 'add', name, area: area || null, subs });
-    _startProjPoll();
-    status.className = 'mode-status applying';
-    status.textContent = '⧗ ALTERAÇÃO ENVIADA — o bot aplica em ~1 min';
-    document.getElementById('proj-name').value = '';
-    document.getElementById('proj-subs').value = '';
+    await queueWrite('projects', { action, name, area: area || null, subs });
+    const pending = getPendingProjects().filter(pe => normTag(pe.name) !== normTag(name));
+    pending.push({ action, name, area: area || null, subs, ts: Date.now() });
+    savePendingProjects(pending);
+    _projEditing = null;
+    refreshProjects();
   } catch (e) {
     status.className = 'mode-status applying';
     status.textContent = '▸ envio não ativado — regras do Firebase precisam liberar /queue/projects';
@@ -1134,10 +1204,12 @@ async function submitProject() {
 }
 
 async function archiveProject(name) {
-  if (!confirm(`Arquivar "${name}"? Ele some do dropdown da daily e dos filtros (histórico continua).`)) return;
+  if (!confirm(`Excluir "${name}"? Ele some do dropdown da daily e dos filtros (o histórico já registrado continua).`)) return;
   try {
     await queueWrite('projects', { action: 'archive', name });
-    _startProjPoll();
+    const pending = getPendingProjects().filter(pe => normTag(pe.name) !== normTag(name));
+    pending.push({ action: 'archive', name, ts: Date.now() });
+    savePendingProjects(pending);
     refreshProjects();
   } catch (e) {
     alert('Envio não ativado — regras do Firebase precisam liberar /queue/projects.');
