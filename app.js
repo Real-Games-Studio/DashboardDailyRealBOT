@@ -1060,16 +1060,22 @@ function renderProjectsForm() {
   mount.innerHTML = `
     <div class="panel" style="margin-bottom:20px">
       <div class="panel-label">${GLYPHS.hex} ${_projEditing ? `EDITANDO: ${escapeHtml(_projEditing)}` : 'NOVO PROJETO'}</div>
-      <div style="display:grid;grid-template-columns:1fr 180px 1fr auto;gap:10px;align-items:end" class="proj-form">
+      <div style="display:grid;grid-template-columns:1fr 180px auto;gap:10px;align-items:end" class="proj-form">
         <div class="modal-field" style="margin:0"><label>Nome</label><input type="text" id="proj-name" placeholder="ex: CARNAVAL" ${_projEditing ? 'readonly style="opacity:.6"' : ''} /></div>
         <div class="modal-field" style="margin:0"><label>Área</label>
           <input type="text" id="proj-area" list="area-list" placeholder="Developer" />
           <datalist id="area-list"><option value="Developer"></option><option value="Arte3D"></option></datalist>
         </div>
-        <div class="modal-field" style="margin:0"><label>Subprojetos (vírgula, opcional)</label><input type="text" id="proj-subs" placeholder="QUIZ, VIDEO" /></div>
         <div style="display:flex;gap:8px">
           <button class="btn-daily" style="height:42px" onclick="submitProject()">${_projEditing ? '✓ Salvar' : '+ Adicionar'}</button>
           ${_projEditing ? '<button class="btn-logout-rg" style="height:42px" onclick="cancelEditProject()">CANCELAR</button>' : ''}
+        </div>
+      </div>
+      <div class="modal-field" style="margin:14px 0 0">
+        <label>Subprojetos (opcional)</label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+          <span id="proj-subs-list" style="display:contents"></span>
+          <button type="button" class="chip" onclick="addSubInput('', true)">+ subprojeto</button>
         </div>
       </div>
       <div class="mode-status" id="proj-status"></div>
@@ -1079,9 +1085,37 @@ function renderProjectsForm() {
     if (p) {
       document.getElementById('proj-name').value = p.name;
       document.getElementById('proj-area').value = p.area || '';
-      document.getElementById('proj-subs').value = (p.subs || []).join(', ');
+      (p.subs || []).forEach(s => addSubInput(s, false));
     }
   }
+}
+
+// um input por subprojeto — + adiciona, ✕ remove, Enter já abre o próximo
+function addSubInput(value, focus) {
+  const list = document.getElementById('proj-subs-list');
+  if (!list) return;
+  const row = document.createElement('span');
+  row.style.cssText = 'display:inline-flex;gap:4px;align-items:center';
+  row.innerHTML = `
+    <input type="text" value="${escapeHtml(value || '')}" placeholder="ex: QUIZ"
+      style="width:150px;background:var(--bg);border:1px solid var(--line2);border-radius:8px;padding:9px 11px;color:var(--txt);font-size:.8rem;outline:none"
+      onkeydown="subInputKey(event)" />
+    <button type="button" class="btn-logout-rg" style="color:#E24E3D;border-color:rgba(226,78,61,.4);padding:8px 10px"
+      onclick="this.parentElement.remove()" title="Remover subprojeto">✕</button>`;
+  list.appendChild(row);
+  if (focus) row.querySelector('input').focus();
+}
+function subInputKey(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    addSubInput('', true);
+  }
+}
+function collectSubs() {
+  return [...document.querySelectorAll('#proj-subs-list input')]
+    .flatMap(i => i.value.split(','))   // se colar "A, B" num campo, também separa
+    .map(s => s.trim().toUpperCase())
+    .filter(Boolean);
 }
 
 async function refreshProjects() {
@@ -1188,7 +1222,7 @@ function cancelEditProject() {
 async function submitProject() {
   const name = (document.getElementById('proj-name').value || '').trim().toUpperCase();
   const area = (document.getElementById('proj-area').value || '').trim();
-  const subs = (document.getElementById('proj-subs').value || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+  const subs = collectSubs();
   const status = document.getElementById('proj-status');
   if (!name) { status.className = 'mode-status applying'; status.textContent = '▸ dá um nome pro projeto'; return; }
   const action = _projEditing ? 'update' : 'add';
