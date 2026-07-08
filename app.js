@@ -95,8 +95,10 @@ function initials(name) {
   return ((parts[0] || '?')[0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
 }
 function discordAvatarURL(user) {
-  if (user.avatar) return `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`;
-  return null;
+  if (!user.avatar) return null;
+  // defesa: se algum valor antigo tiver a URL completa em vez do hash, usa direto
+  if (String(user.avatar).startsWith('http')) return user.avatar;
+  return `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`;
 }
 // html do avatar: imagem do Discord ou iniciais coloridas
 function avatarHtml(user, cls) {
