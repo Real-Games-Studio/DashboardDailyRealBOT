@@ -87,8 +87,42 @@ function hashStr(s) {
   return Math.abs(h);
 }
 function colorForTag(tag) { return PALETTE[hashStr(tag.toUpperCase()) % PALETTE.length]; }
-function colorForUser(userId) { return PALETTE[hashStr(userId) % PALETTE.length]; }
 function colorForRole(role) { return ROLE_COLORS[role] || PALETTE[hashStr(role) % PALETTE.length]; }
+
+// ---- cor por pessoa = TOM da cor do cargo dela (mesmo matiz, variação por pessoa) ----
+function hexToHsl(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0; const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > .5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+    else if (max === g) h = ((b - r) / d + 2) / 6;
+    else h = ((r - g) / d + 4) / 6;
+  }
+  return [h * 360, s * 100, l * 100];
+}
+function hslToHex(h, s, l) {
+  s /= 100; l /= 100;
+  const k = n => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  const toHex = x => Math.round(x * 255).toString(16).padStart(2, '0');
+  return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`.toUpperCase();
+}
+const _clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+function colorForUser(userId) {
+  const u = _lastData && _lastData.users ? _lastData.users.find(x => x._id === userId) : null;
+  const base = u ? colorForRole(u.role || NO_ROLE) : PALETTE[hashStr(userId) % PALETTE.length];
+  const [h, s, l] = hexToHsl(base);
+  const seed = hashStr(userId);
+  const dl = (seed % 29) - 14;            // luminosidade -14..+14
+  const ds = ((seed >> 4) % 25) - 12;     // saturação   -12..+12
+  return hslToHex(h, _clamp(s + ds, 45, 100), _clamp(l + dl, 38, 72));
+}
 
 function initials(name) {
   const parts = (name || '?').trim().split(/\s+/);
