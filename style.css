@@ -384,10 +384,16 @@ h1.page-h {
 .filter-select:hover { border-color: var(--line-hover); }
 .filter-select:focus { border-color: var(--cyan); }
 .filter-select option { background: var(--panel); color: var(--txt); }
+.filter-select optgroup { background: var(--panel); color: var(--dim); font-style: normal; }
 .chip:hover { border-color: var(--line-hover); color: var(--txt); }
 .chip.active { color: var(--txt); border-color: var(--cyan); background: rgba(34, 201, 239, .08); }
 .chip .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .chip .sq { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+.chip .chev { font-family: var(--font-mono); font-size: 9px; opacity: .55; }
+/* seleção hierárquica de projetos no modal: linha de pais + linha de subprojetos empilhadas */
+.modal-parentrow, .modal-subrow { display: flex; gap: 8px; flex-wrap: wrap; flex-basis: 100%; width: 100%; }
+.modal-subrow { margin-top: 2px; padding-left: 12px; border-left: 2px solid var(--line2); }
+.chip.sub { text-transform: none; letter-spacing: .04em; }
 .chip .cnt { font-family: var(--font-mono); font-size: 9px; opacity: .7; }
 
 /* ---- Lista de relatórios ---- */

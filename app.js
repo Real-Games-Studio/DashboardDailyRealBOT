@@ -433,35 +433,58 @@ function openDailyModal() {
   renderModalProjects();
 }
 
-function projectPathsWithArea(data) {
-  const out = [];
-  for (const p of activeProjects(data)) {
-    const subs = p.subs || [];
-    if (subs.length) subs.forEach(s => out.push({ path: `${p.name}/${s}`, area: p.area || null }));
-    else out.push({ path: p.name, area: p.area || null });
-  }
-  return out;
+function modalProjectsForMe(data, me) {
+  let projs = activeProjects(data).map(p => ({ name: p.name, area: p.area || null, subs: (p.subs || []).slice() }));
+  // Arte3D vê projetos de Arte3D, Developer os de Developer; sem área aparece pra todos
+  if (me && me.role) projs = projs.filter(p => !p.area || p.area === me.role);
+  return projs;
 }
+
+let _modalProjOpen = null;  // projeto-pai expandido (accordion: só um aberto por vez)
 
 function renderModalProjects() {
   const field = document.getElementById('modal-projects-field');
   const box = document.getElementById('modal-projects');
   if (!field || !box) return;
-  let items = _lastData ? projectPathsWithArea(_lastData) : [];
-  // filtra pela área do cargo da pessoa: Arte3D vê tags de Arte3D, Developer as de Developer
-  // (projeto sem área definida aparece pra todo mundo)
   const me = _modalUsers.find(u => u._id === (localStorage.getItem('dailybot_me') || ''));
-  if (me && me.role) {
-    items = items.filter(it => !it.area || it.area === me.role);
-  }
-  if (!items.length) { field.style.display = 'none'; return; }
+  const projs = _lastData ? modalProjectsForMe(_lastData, me) : [];
+  if (!projs.length) { field.style.display = 'none'; return; }
   field.style.display = '';
-  // limpa seleções que saíram do filtro (ex: trocou de pessoa)
-  const visible = new Set(items.map(it => it.path));
-  for (const p of [..._modalProjSel]) if (!visible.has(p)) _modalProjSel.delete(p);
-  box.innerHTML = items.map(({ path }) =>
-    `<button class="chip ${_modalProjSel.has(path) ? 'active' : ''}" onclick="toggleModalProject('${escapeHtml(path)}')"><span class="sq" style="background:${colorForTag(path.split('/')[0])}"></span>${escapeHtml(path)}</button>`
-  ).join('');
+  // caminhos válidos no filtro atual: limpa seleção/aberto que saíram (ex: trocou de pessoa)
+  const valid = new Set();
+  projs.forEach(p => p.subs.length ? p.subs.forEach(s => valid.add(`${p.name}/${s}`)) : valid.add(p.name));
+  for (const path of [..._modalProjSel]) if (!valid.has(path)) _modalProjSel.delete(path);
+  if (_modalProjOpen && !projs.some(p => p.name === _modalProjOpen && p.subs.length)) _modalProjOpen = null;
+
+  // nível 1: um chip por projeto. Sem subprojetos = seleciona direto; com = expande.
+  const parents = projs.map(p => {
+    const c = colorForTag(p.name);
+    if (!p.subs.length) {
+      const on = _modalProjSel.has(p.name);
+      return `<button class="chip ${on ? 'active' : ''}" onclick="toggleModalProject('${escapeHtml(p.name)}')"><span class="sq" style="background:${c}"></span>${escapeHtml(p.name)}</button>`;
+    }
+    const n = p.subs.filter(s => _modalProjSel.has(`${p.name}/${s}`)).length;
+    const open = _modalProjOpen === p.name;
+    return `<button class="chip ${open ? 'active' : ''}" onclick="toggleModalParent('${escapeHtml(p.name)}')"><span class="sq" style="background:${c}"></span>${escapeHtml(p.name)}${n ? ` <span class="cnt">${n}</span>` : ''} <span class="chev">${open ? '▾' : '▸'}</span></button>`;
+  }).join('');
+
+  // nível 2: subprojetos apenas do pai aberto
+  let subRow = '';
+  const openP = _modalProjOpen ? projs.find(p => p.name === _modalProjOpen) : null;
+  if (openP) {
+    const c = colorForTag(openP.name);
+    subRow = `<div class="modal-subrow">` + openP.subs.map(s => {
+      const path = `${openP.name}/${s}`;
+      const on = _modalProjSel.has(path);
+      return `<button class="chip sub ${on ? 'active' : ''}" onclick="toggleModalProject('${escapeHtml(path)}')"><span class="sq" style="background:${c}"></span>${escapeHtml(s)}</button>`;
+    }).join('') + `</div>`;
+  }
+
+  box.innerHTML = `<div class="modal-parentrow">${parents}</div>${subRow}`;
+}
+function toggleModalParent(name) {
+  _modalProjOpen = _modalProjOpen === name ? null : name;
+  renderModalProjects();
 }
 function toggleModalProject(p) {
   if (_modalProjSel.has(p)) _modalProjSel.delete(p); else _modalProjSel.add(p);
@@ -475,11 +498,19 @@ function renderModalChips() {
   const sel = document.getElementById('modal-who-select');
   if (!sel) return;
   const saved = localStorage.getItem('dailybot_me') || '';
+  // agrupa por cargo (Developer / Arte3D / Sem cargo) — hierarquia no próprio dropdown
+  const byRole = new Map();
+  _modalUsers.filter(u => u.active !== false)
+    .sort((a, b) => a.username.localeCompare(b.username))
+    .forEach(u => {
+      const r = u.role || 'Sem cargo';
+      if (!byRole.has(r)) byRole.set(r, []);
+      byRole.get(r).push(u);
+    });
+  const roleOrder = [...byRole.keys()].sort((a, b) => a === 'Sem cargo' ? 1 : b === 'Sem cargo' ? -1 : a.localeCompare(b));
+  const opt = u => `<option value="${u._id}" ${u._id === saved ? 'selected' : ''}>${escapeHtml(u.username)}</option>`;
   sel.innerHTML = '<option value="">Selecione...</option>' +
-    _modalUsers.filter(u => u.active !== false)
-      .sort((a, b) => a.username.localeCompare(b.username))
-      .map(u => `<option value="${u._id}" ${u._id === saved ? 'selected' : ''}>${escapeHtml(u.username)}${u.role ? ` — ${escapeHtml(u.role)}` : ''}</option>`)
-      .join('');
+    roleOrder.map(r => `<optgroup label="${escapeHtml(r)}">${byRole.get(r).map(opt).join('')}</optgroup>`).join('');
   updateModalLabels(saved);
 }
 function pickModalUser(uid) {
