@@ -397,7 +397,9 @@ function renderDailyModal() {
       </div>
       <div class="modal-field">
         <label>Quem é você?</label>
-        <div class="who-chips" id="modal-who"></div>
+        <select class="filter-select" id="modal-who-select" style="width:100%" onchange="pickModalUser(this.value)">
+          <option value="">Selecione...</option>
+        </select>
       </div>
       <div class="modal-field">
         <label id="modal-label-a">O que você fez ontem?</label>
@@ -431,15 +433,34 @@ function openDailyModal() {
   renderModalProjects();
 }
 
+function projectPathsWithArea(data) {
+  const out = [];
+  for (const p of activeProjects(data)) {
+    const subs = p.subs || [];
+    if (subs.length) subs.forEach(s => out.push({ path: `${p.name}/${s}`, area: p.area || null }));
+    else out.push({ path: p.name, area: p.area || null });
+  }
+  return out;
+}
+
 function renderModalProjects() {
   const field = document.getElementById('modal-projects-field');
   const box = document.getElementById('modal-projects');
   if (!field || !box) return;
-  const paths = _lastData ? projectPaths(_lastData) : [];
-  if (!paths.length) { field.style.display = 'none'; return; }
+  let items = _lastData ? projectPathsWithArea(_lastData) : [];
+  // filtra pela área do cargo da pessoa: Arte3D vê tags de Arte3D, Developer as de Developer
+  // (projeto sem área definida aparece pra todo mundo)
+  const me = _modalUsers.find(u => u._id === (localStorage.getItem('dailybot_me') || ''));
+  if (me && me.role) {
+    items = items.filter(it => !it.area || it.area === me.role);
+  }
+  if (!items.length) { field.style.display = 'none'; return; }
   field.style.display = '';
-  box.innerHTML = paths.map(p =>
-    `<button class="chip ${_modalProjSel.has(p) ? 'active' : ''}" onclick="toggleModalProject('${escapeHtml(p)}')"><span class="sq" style="background:${colorForTag(p.split('/')[0])}"></span>${escapeHtml(p)}</button>`
+  // limpa seleções que saíram do filtro (ex: trocou de pessoa)
+  const visible = new Set(items.map(it => it.path));
+  for (const p of [..._modalProjSel]) if (!visible.has(p)) _modalProjSel.delete(p);
+  box.innerHTML = items.map(({ path }) =>
+    `<button class="chip ${_modalProjSel.has(path) ? 'active' : ''}" onclick="toggleModalProject('${escapeHtml(path)}')"><span class="sq" style="background:${colorForTag(path.split('/')[0])}"></span>${escapeHtml(path)}</button>`
   ).join('');
 }
 function toggleModalProject(p) {
@@ -451,19 +472,20 @@ function closeDailyModal() {
   if (modal) modal.classList.remove('visible');
 }
 function renderModalChips() {
-  const box = document.getElementById('modal-who');
-  if (!box) return;
+  const sel = document.getElementById('modal-who-select');
+  if (!sel) return;
   const saved = localStorage.getItem('dailybot_me') || '';
-  box.innerHTML = _modalUsers.filter(u => u.active !== false).map(u => {
-    const c = colorForUser(u._id);
-    const on = u._id === saved;
-    return `<button class="chip ${on ? 'active' : ''}" data-uid="${u._id}" onclick="pickModalUser('${u._id}')"><span class="dot" style="background:${c}"></span>${escapeHtml(u.username)}</button>`;
-  }).join('');
+  sel.innerHTML = '<option value="">Selecione...</option>' +
+    _modalUsers.filter(u => u.active !== false)
+      .sort((a, b) => a.username.localeCompare(b.username))
+      .map(u => `<option value="${u._id}" ${u._id === saved ? 'selected' : ''}>${escapeHtml(u.username)}${u.role ? ` — ${escapeHtml(u.role)}` : ''}</option>`)
+      .join('');
   updateModalLabels(saved);
 }
 function pickModalUser(uid) {
   localStorage.setItem('dailybot_me', uid);
-  renderModalChips();
+  updateModalLabels(uid);
+  renderModalProjects();  // refiltra as tags pela área da pessoa
 }
 function updateModalLabels(uid) {
   const u = _modalUsers.find(x => x._id === uid);
