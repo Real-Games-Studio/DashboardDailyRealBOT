@@ -329,11 +329,10 @@ const GLYPHS = {
 // ==========================================================
 const NAV_ITEMS = [
   { href: 'dashboard.html', label: 'Dashboard', glyph: 'target', color: '#22C9EF' },
-  { href: 'timeline.html', label: 'Timeline', glyph: 'bars', color: '#E24E3D' },
   { href: 'weekly.html', label: 'Weekly', glyph: 'play', color: '#EE3B8B' },
   { href: 'projetos.html', label: 'Projetos', glyph: 'hex', color: '#FFD447' },
   { href: 'users.html', label: 'Membros', glyph: 'dots', color: '#22C9EF' },
-  { href: 'register.html', label: 'Registrar', glyph: 'hex', color: '#FFD447' },
+  { href: 'register.html', label: 'Registrar', glyph: 'bars', color: '#E24E3D' },
 ];
 
 const LOGO_MARK = `<svg width="38" height="38" viewBox="0 0 100 100" style="border-radius:6px;flex-shrink:0">
@@ -672,7 +671,18 @@ function renderDashPage(data) {
       .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || '').localeCompare(a.createdAt || ''))
       .slice(0, 50);
     const sect = `<div class="sect-head">${GLYPHS.bars} ÚLTIMOS RELATÓRIOS <span class="cnt">${scopeReports.length} relatório${scopeReports.length !== 1 ? 's' : ''}</span></div>`;
-    mainHtml = sorted.length ? sect + `<div class="reports-table">${sorted.map((r, i) => reportRowHtml(r, userMap, i)).join('')}</div>`
+    // lista agrupada por dia (herdado da antiga Timeline — as duas abas viraram uma)
+    let listHtml = '';
+    let lastDate = null;
+    let i = 0;
+    for (const r of sorted) {
+      if (r.date !== lastDate) {
+        lastDate = r.date;
+        listHtml += `<div class="tl-day-head" style="margin-top:${i ? 14 : 0}px">${formatDayLong(r.date)}${r.date === today ? '<span class="today-mark">· HOJE</span>' : ''}</div>`;
+      }
+      listHtml += reportRowHtml(r, userMap, i++);
+    }
+    mainHtml = sorted.length ? sect + `<div class="reports-table">${listHtml}</div>`
       : '<div class="empty-state boxed"><div class="icon">🗂️</div><p>Nenhum relatório com esses filtros.</p></div>';
   }
 
@@ -807,58 +817,6 @@ function selectMember(id) {
 function selectProject(name) {
   state.project = state.project === name ? null : name;
   renderDashPage(window._dashData);
-}
-
-// ==========================================================
-// PÁGINA: TIMELINE
-// ==========================================================
-async function initTimeline() {
-  mountChrome('timeline.html');
-  const content = document.getElementById('content');
-  content.innerHTML = '<div class="loading"><div class="spinner"></div><p>Carregando...</p></div>';
-  try {
-    const data = await loadAllData();
-    _modalUsers = data.users;
-    const userMap = new Map(data.users.map(u => [u._id, u]));
-    const byDate = new Map();
-    for (const r of data.reports) {
-      if (!byDate.has(r.date)) byDate.set(r.date, []);
-      byDate.get(r.date).push(r);
-    }
-    const dates = [...byDate.keys()].sort((a, b) => b.localeCompare(a)).slice(0, 15);
-    const today = todayStr();
-    if (!dates.length) {
-      content.innerHTML = '<div class="empty-state boxed"><div class="icon">🗂️</div><p>Nenhum relatório ainda.</p></div>';
-      return;
-    }
-    content.innerHTML = dates.map((d, di) => {
-      const entries = byDate.get(d).sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
-      return `
-      <div class="tl-day rg-in" style="animation-delay:${Math.min(di, 8) * 45}ms">
-        <div class="tl-day-head">${formatDayLong(d)}${d === today ? '<span class="today-mark">· HOJE</span>' : ''}</div>
-        ${entries.map(r => {
-          const u = userMap.get(r.userId);
-          const c = u ? colorForUser(u._id) : '#5A6273';
-          const [la, lb] = colLabels(u);
-          return `
-          <div class="tl-entry" style="border-left-color:${c}">
-            <div class="tl-entry-head">
-              ${u ? avatarHtml(u, 'mini-avatar') : ''}
-              <strong style="font-size:.85rem;cursor:pointer" onclick="selectMember('${r.userId}')">${u ? escapeHtml(u.username) : 'Removido'}</strong>
-              <span class="tl-entry-time">${formatTime(r.createdAt)}</span>
-            </div>
-            <div class="tl-cols">
-              <div><div class="report-col-label">${la}</div>${linesHtml(r.yesterday)}</div>
-              <div><div class="report-col-label hl">${lb}</div>${linesHtml(r.today)}</div>
-            </div>
-            ${r.blockers ? `<div class="blocker-box" style="margin-top:10px">🚧 ${escapeHtml(r.blockers)}</div>` : ''}
-          </div>`;
-        }).join('')}
-      </div>`;
-    }).join('');
-  } catch (err) {
-    content.innerHTML = `<div class="empty-state boxed"><div class="icon">⚠️</div><p>Erro ao carregar.<br>${escapeHtml(err.message)}</p></div>`;
-  }
 }
 
 // ==========================================================
@@ -1271,7 +1229,6 @@ document.addEventListener('DOMContentLoaded', () => {
   if (page === 'register') { mountChrome('register.html'); return; }
   if (!requireAuth()) return;
   if (page === 'dashboard') initDashboard();
-  else if (page === 'timeline') initTimeline();
   else if (page === 'weekly') initWeekly();
   else if (page === 'users') initMembers();
   else if (page === 'projetos') initProjects();
