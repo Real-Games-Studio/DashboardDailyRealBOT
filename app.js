@@ -433,11 +433,9 @@ function openDailyModal() {
   renderModalProjects();
 }
 
-function modalProjectsForMe(data, me) {
-  let projs = activeProjects(data).map(p => ({ name: p.name, area: p.area || null, subs: (p.subs || []).slice() }));
-  // Arte3D vê projetos de Arte3D, Developer os de Developer; sem área aparece pra todos
-  if (me && me.role) projs = projs.filter(p => !p.area || p.area === me.role);
-  return projs;
+function modalProjectsForMe(data) {
+  // sem filtro de área — todo mundo mexe nos mesmos projetos, todos veem todos
+  return activeProjects(data).map(p => ({ name: p.name, subs: (p.subs || []).slice() }));
 }
 
 let _modalProjOpen = null;  // projeto-pai expandido (accordion: só um aberto por vez)
@@ -446,8 +444,7 @@ function renderModalProjects() {
   const field = document.getElementById('modal-projects-field');
   const box = document.getElementById('modal-projects');
   if (!field || !box) return;
-  const me = _modalUsers.find(u => u._id === (localStorage.getItem('dailybot_me') || ''));
-  const projs = _lastData ? modalProjectsForMe(_lastData, me) : [];
+  const projs = _lastData ? modalProjectsForMe(_lastData) : [];
   if (!projs.length) { field.style.display = 'none'; return; }
   field.style.display = '';
   // caminhos válidos no filtro atual: limpa seleção/aberto que saíram (ex: trocou de pessoa)
@@ -1113,12 +1110,8 @@ function renderProjectsForm() {
   mount.innerHTML = `
     <div class="panel" style="margin-bottom:20px">
       <div class="panel-label">${GLYPHS.hex} ${_projEditing ? `EDITANDO: ${escapeHtml(_projEditing)}` : 'NOVO PROJETO'}</div>
-      <div style="display:grid;grid-template-columns:1fr 180px auto;gap:10px;align-items:end" class="proj-form">
+      <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end" class="proj-form">
         <div class="modal-field" style="margin:0"><label>Nome</label><input type="text" id="proj-name" placeholder="ex: CARNAVAL" ${_projEditing ? 'readonly style="opacity:.6"' : ''} /></div>
-        <div class="modal-field" style="margin:0"><label>Área</label>
-          <input type="text" id="proj-area" list="area-list" placeholder="Developer" />
-          <datalist id="area-list"><option value="Developer"></option><option value="Arte3D"></option></datalist>
-        </div>
         <div style="display:flex;gap:8px">
           <button class="btn-daily" style="height:42px" onclick="submitProject()">${_projEditing ? '✓ Salvar' : '+ Adicionar'}</button>
           ${_projEditing ? '<button class="btn-logout-rg" style="height:42px" onclick="cancelEditProject()">CANCELAR</button>' : ''}
@@ -1137,7 +1130,6 @@ function renderProjectsForm() {
     const p = mergedProjects(_lastData, getPendingProjects()).find(x => normTag(x.name) === normTag(_projEditing));
     if (p) {
       document.getElementById('proj-name').value = p.name;
-      document.getElementById('proj-area').value = p.area || '';
       (p.subs || []).forEach(s => addSubInput(s, false));
     }
   }
@@ -1226,37 +1218,28 @@ function renderProjectsPage(data, pending) {
   if (!projects.length) {
     listHtml = '<div class="empty-state boxed"><div class="icon">🏷</div><p>Nenhum projeto cadastrado ainda.<br>Adicione o primeiro acima — ele vira opção no dropdown da daily e filtro no dashboard.</p></div>';
   } else {
-    const byArea = new Map();
-    for (const p of projects) {
-      const a = p.area || 'Sem área';
-      if (!byArea.has(a)) byArea.set(a, []);
-      byArea.get(a).push(p);
-    }
-    listHtml = [...byArea.keys()].sort().map(area => {
-      const c = colorForRole(area);
-      const cards = byArea.get(area).sort((a, b) => a.name.localeCompare(b.name)).map(p => {
-        const pend = p._pending;
-        const dim = pend ? 'opacity:.45' : '';
-        const statusLine = pend === 'archive'
-          ? '<div class="mode-status applying">⧗ REMOVENDO…</div>'
-          : pend
-            ? '<div class="mode-status applying">⧗ SINCRONIZANDO — o bot confirma em ~1 min</div>'
-            : '';
-        return `
-        <div class="user-card-rg rg-in" style="${dim}">
-          <div style="display:flex;align-items:center;gap:10px">
-            <span class="sq" style="width:12px;height:12px;border-radius:3px;background:${colorForTag(p.name)}"></span>
-            <strong style="flex:1">${escapeHtml(p.name)}</strong>
-            <button class="btn-logout-rg" ${pend ? 'disabled' : ''} onclick="editProject('${escapeHtml(p.name)}')" title="Editar área e subprojetos">✎</button>
-            <button class="btn-logout-rg" ${pend ? 'disabled' : ''} style="color:#E24E3D;border-color:rgba(226,78,61,.4)" onclick="archiveProject('${escapeHtml(p.name)}')" title="Excluir (some do dropdown e dos filtros; histórico continua)">✕</button>
-          </div>
-          ${(p.subs || []).length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">${p.subs.map(s => `<span class="tag-badge" style="background:${colorForTag(p.name)}1F;color:${colorForTag(p.name)}">${escapeHtml(s)}</span>`).join('')}</div>` : ''}
-          <div class="uc-meta" style="margin-top:10px">na daily aparece como: ${(p.subs || []).length ? p.subs.map(s => `${escapeHtml(p.name)}/${escapeHtml(s)}`).join(' · ') : escapeHtml(p.name)}</div>
-          ${statusLine}
-        </div>`;
-      }).join('');
-      return `<div class="role-head"><span class="sq" style="background:${c}"></span><span style="color:${c}">${escapeHtml(area)}</span></div><div class="users-grid">${cards}</div>`;
+    const cards = projects.slice().sort((a, b) => a.name.localeCompare(b.name)).map(p => {
+      const pend = p._pending;
+      const dim = pend ? 'opacity:.45' : '';
+      const statusLine = pend === 'archive'
+        ? '<div class="mode-status applying">⧗ REMOVENDO…</div>'
+        : pend
+          ? '<div class="mode-status applying">⧗ SINCRONIZANDO — o bot confirma em ~1 min</div>'
+          : '';
+      return `
+      <div class="user-card-rg rg-in" style="${dim}">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="sq" style="width:12px;height:12px;border-radius:3px;background:${colorForTag(p.name)}"></span>
+          <strong style="flex:1">${escapeHtml(p.name)}</strong>
+          <button class="btn-logout-rg" ${pend ? 'disabled' : ''} onclick="editProject('${escapeHtml(p.name)}')" title="Editar subprojetos">✎</button>
+          <button class="btn-logout-rg" ${pend ? 'disabled' : ''} style="color:#E24E3D;border-color:rgba(226,78,61,.4)" onclick="archiveProject('${escapeHtml(p.name)}')" title="Excluir (some do dropdown e dos filtros; histórico continua)">✕</button>
+        </div>
+        ${(p.subs || []).length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">${p.subs.map(s => `<span class="tag-badge" style="background:${colorForTag(p.name)}1F;color:${colorForTag(p.name)}">${escapeHtml(s)}</span>`).join('')}</div>` : ''}
+        <div class="uc-meta" style="margin-top:10px">na daily aparece como: ${(p.subs || []).length ? p.subs.map(s => `${escapeHtml(p.name)}/${escapeHtml(s)}`).join(' · ') : escapeHtml(p.name)}</div>
+        ${statusLine}
+      </div>`;
     }).join('');
+    listHtml = `<div class="users-grid">${cards}</div>`;
   }
 
   content.innerHTML = listHtml;
@@ -1274,15 +1257,14 @@ function cancelEditProject() {
 
 async function submitProject() {
   const name = (document.getElementById('proj-name').value || '').trim().toUpperCase();
-  const area = (document.getElementById('proj-area').value || '').trim();
   const subs = collectSubs();
   const status = document.getElementById('proj-status');
   if (!name) { status.className = 'mode-status applying'; status.textContent = '▸ dá um nome pro projeto'; return; }
   const action = _projEditing ? 'update' : 'add';
   try {
-    await queueWrite('projects', { action, name, area: area || null, subs });
+    await queueWrite('projects', { action, name, area: null, subs });
     const pending = getPendingProjects().filter(pe => normTag(pe.name) !== normTag(name));
-    pending.push({ action, name, area: area || null, subs, ts: Date.now() });
+    pending.push({ action, name, area: null, subs, ts: Date.now() });
     savePendingProjects(pending);
     _projEditing = null;
     renderProjectsForm();  // limpa o form pro próximo cadastro
