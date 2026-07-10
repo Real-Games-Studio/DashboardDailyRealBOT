@@ -982,15 +982,47 @@ function wkMediaHtml(id) {
   const label = it.label
     ? `<span class="wk-proj" style="color:${colorForTag(it.label.split('/')[0])}">${escapeHtml(it.label)}</span>`
     : '';
-  // clique amplia no próprio dash (lightbox); o ↗ de lá leva pro Drive
+  // clique amplia no próprio dash (lightbox); o ↗ de lá leva pro Drive.
+  // touch: arrastar pro lado troca de mídia (celular)
+  const touch = `ontouchstart="wkTouchStart(event)" ontouchend="wkTouchEnd('${id}',event)"`;
   if (it.type === 'video') {
     if (it.driveId) {
       // player do Drive embutido no card; ⛶ amplia no lightbox
-      return `<div class="media-box filled-video"><iframe class="wk-frame" src="https://drive.google.com/file/d/${it.driveId}/preview" allow="autoplay; fullscreen" allowfullscreen loading="lazy"></iframe><button class="wk-expand" title="Ampliar" onclick="wkOpenLightbox('${id}')">⛶</button>${label}${nav}</div>`;
+      return `<div class="media-box filled-video" ${touch}><iframe class="wk-frame" src="https://drive.google.com/file/d/${it.driveId}/preview" allow="autoplay; fullscreen" allowfullscreen loading="lazy"></iframe><button class="wk-expand" title="Ampliar" onclick="wkOpenLightbox('${id}')">⛶</button>${label}${nav}</div>`;
     }
-    return `<div class="media-box filled-video" onclick="wkOpenLightbox('${id}')"><div class="play-btn">▶</div>${label}${nav}</div>`;
+    return `<div class="media-box filled-video" ${touch} onclick="wkCardClick('${id}')"><div class="play-btn">▶</div>${label}${nav}</div>`;
   }
-  return `<div class="media-box filled-img" style="background-image:url('${it.url}')" onclick="wkOpenLightbox('${id}')">${label}${nav}</div>`;
+  return `<div class="media-box filled-img" ${touch} style="background-image:url('${it.url}')" onclick="wkCardClick('${id}')">${label}${nav}</div>`;
+}
+
+// ---- swipe (celular): arrastar pro lado navega; clique só abre se NÃO arrastou ----
+let _wkTouchX = null;
+let _wkSwiped = false;
+
+function wkTouchStart(e) {
+  _wkTouchX = e.touches && e.touches.length ? e.touches[0].clientX : null;
+}
+function wkTouchEnd(id, e) {
+  if (_wkTouchX == null) return;
+  const x = e.changedTouches && e.changedTouches.length ? e.changedTouches[0].clientX : _wkTouchX;
+  const dx = x - _wkTouchX;
+  _wkTouchX = null;
+  if (Math.abs(dx) > 40) {
+    _wkSwiped = true;
+    setTimeout(() => { _wkSwiped = false; }, 400);
+    wkNav(id, dx < 0 ? 1 : -1);
+  }
+}
+function wkCardClick(id) {
+  if (_wkSwiped) return;  // era um arrasto, não um clique
+  wkOpenLightbox(id);
+}
+function wkLBTouchEnd(e) {
+  if (_wkTouchX == null) return;
+  const x = e.changedTouches && e.changedTouches.length ? e.changedTouches[0].clientX : _wkTouchX;
+  const dx = x - _wkTouchX;
+  _wkTouchX = null;
+  if (Math.abs(dx) > 40) wkLBNav(dx < 0 ? 1 : -1);
 }
 
 // ---- lightbox: mídia ampliada no próprio dash, navegável, com ↗ pro Drive ----
@@ -1041,7 +1073,7 @@ function wkLBRender() {
         <button class="wk-lb-btn" onclick="wkLBClose()" title="Fechar (Esc)">✕</button>
       </div>
     </div>
-    <div class="wk-lb-stage">
+    <div class="wk-lb-stage" ontouchstart="wkTouchStart(event)" ontouchend="wkLBTouchEnd(event)">
       ${n > 1 ? `<button class="wk-nav wk-lb-arrow" onclick="wkLBNav(-1)">‹</button>` : '<span></span>'}
       <div class="wk-lb-holder">${media}</div>
       ${n > 1 ? `<button class="wk-nav wk-lb-arrow" onclick="wkLBNav(1)">›</button>` : '<span></span>'}
