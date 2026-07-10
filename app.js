@@ -1134,7 +1134,10 @@ async function initWeekly() {
     const weeks = [...byWeek.keys()].sort((a, b) => b.localeCompare(a));
 
     content.innerHTML = banner + weeks.map(wk => {
-      const cards = byWeek.get(wk).map(w => {
+      // mais recente primeiro (createdAt estável; updatedAt muda na manutenção)
+      const cards = byWeek.get(wk).slice()
+        .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+        .map(w => {
         const u = userMap.get(w.userId);
         const role = u && u.role ? u.role : null;
         const summary = linesHtml(w.summary);
