@@ -392,7 +392,7 @@ function renderDailyModal() {
   <div class="modal-overlay" id="daily-modal">
     <div class="modal-card">
       <div class="modal-head">
-        <div class="modal-title">▸ Fazer Daily</div>
+        <div class="modal-title" id="modal-title">▸ Fazer Daily</div>
         <button class="modal-close" onclick="closeDailyModal()">✕</button>
       </div>
       <div class="modal-field">
@@ -424,13 +424,52 @@ function renderDailyModal() {
 }
 
 const _modalProjSel = new Set();
+let _modalEditing = false;  // true quando a pessoa já mandou a daily hoje → o modal vira "editar"
+
+function findTodayReport(uid) {
+  if (!uid || !_lastData) return null;
+  const t = todayStr();
+  return (_lastData.reports || []).find(r => r.userId === uid && r.date === t) || null;
+}
+
+// Se já existe daily de hoje, pré-preenche tudo e o modal vira "Editar".
+// Assim editar = mexer no que já está lá, em vez de refazer do zero.
+function applyExistingDaily(uid) {
+  const ta = document.getElementById('modal-yesterday');
+  const tb = document.getElementById('modal-today');
+  const bl = document.getElementById('modal-blockers');
+  if (!ta || !tb || !bl) return;
+  const title = document.getElementById('modal-title');
+  const btn = document.getElementById('modal-send');
+  const msg = document.getElementById('modal-msg');
+  const rep = findTodayReport(uid);
+
+  _modalProjSel.clear();
+  _modalEditing = !!rep;
+
+  if (rep) {
+    ta.value = rep.yesterday || '';
+    tb.value = rep.today || '';
+    bl.value = rep.blockers || '';
+    (rep.projects || []).forEach(p => _modalProjSel.add(p));
+    if (title) title.textContent = '✏️ Editar Daily de hoje';
+    if (btn) btn.textContent = 'Salvar alterações ▸';
+    if (msg) { msg.className = 'modal-msg'; msg.textContent = 'você já enviou hoje — ajuste e salve. a mensagem no canal também é corrigida.'; }
+  } else {
+    ta.value = ''; tb.value = ''; bl.value = '';
+    if (title) title.textContent = '▸ Fazer Daily';
+    if (btn) btn.textContent = 'Enviar Daily ▸';
+    if (msg) { msg.className = 'modal-msg'; msg.textContent = ''; }
+  }
+  renderModalProjects();
+}
 
 function openDailyModal() {
   const modal = document.getElementById('daily-modal');
   if (!modal) return;
   modal.classList.add('visible');
   renderModalChips();
-  renderModalProjects();
+  applyExistingDaily(localStorage.getItem('dailybot_me') || '');
 }
 
 function modalProjectsForMe(data) {
@@ -513,7 +552,7 @@ function renderModalChips() {
 function pickModalUser(uid) {
   localStorage.setItem('dailybot_me', uid);
   updateModalLabels(uid);
-  renderModalProjects();  // refiltra as tags pela área da pessoa
+  applyExistingDaily(uid);  // trocou de pessoa → pré-preenche (ou limpa) e re-renderiza projetos
 }
 function updateModalLabels(uid) {
   const u = _modalUsers.find(x => x._id === uid);
@@ -543,9 +582,12 @@ async function submitDailyModal() {
       userId: uid, date: todayStr(),
       yesterday: yesterday || null, today: today || null, blockers: blockers || null,
       projects: _modalProjSel.size ? [..._modalProjSel] : null,
+      editing: _modalEditing,  // bot edita o embed do canal em vez de postar outro
     });
     msg.className = 'modal-msg ok';
-    msg.textContent = '✓ enviado! o bot processa em instantes.';
+    msg.textContent = _modalEditing
+      ? '✓ alterações salvas! o bot corrige o canal em instantes.'
+      : '✓ enviado! o bot processa em instantes.';
     setTimeout(() => { closeDailyModal(); window.location.reload(); }, 1800);
   } catch (e) {
     msg.className = 'modal-msg err';
