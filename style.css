@@ -602,6 +602,14 @@ h1.page-h {
 }
 .wk-lb-media { max-width: 100%; max-height: 100%; border-radius: 10px; border: 1px solid var(--line2); object-fit: contain; }
 .wk-lb-frame { width: min(1100px, 86vw); aspect-ratio: 16 / 9; max-height: 78vh; border: 0; border-radius: 10px; }
+.wk-lb-fallback {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 14px 22px; border-radius: 10px;
+  background: var(--panel); border: 1px solid var(--line2); color: var(--txt);
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: .06em;
+  text-decoration: none;
+}
+.wk-lb-fallback:hover { border-color: var(--cyan); color: var(--cyan); }
 /* swipe no celular: deixa o arrasto horizontal chegar no JS (vertical segue rolando a página) */
 .weekly-media .media-box, .wk-lb-stage { touch-action: pan-y; }
 @media (hover: none) and (pointer: coarse) {

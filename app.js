@@ -986,13 +986,28 @@ function wkMediaHtml(id) {
   // touch: arrastar pro lado troca de mídia (celular)
   const touch = `ontouchstart="wkTouchStart(event)" ontouchend="wkTouchEnd('${id}',event)"`;
   if (it.type === 'video') {
-    if (it.driveId) {
-      // player do Drive embutido no card; ⛶ amplia no lightbox
+    // O iframe /preview do Drive precisa de cookies de terceiros — celular
+    // bloqueia e dá "não foi possível carregar". Em touch, vira tile ▶ que
+    // abre o lightbox com <video> nativo (URL do Discord, sem cookie).
+    if (it.driveId && !_wkIsTouch()) {
       return `<div class="media-box filled-video" ${touch}><iframe class="wk-frame" src="https://drive.google.com/file/d/${it.driveId}/preview" allow="autoplay; fullscreen" allowfullscreen loading="lazy"></iframe><button class="wk-expand" title="Ampliar" onclick="wkOpenLightbox('${id}')">⛶</button>${label}${nav}</div>`;
     }
     return `<div class="media-box filled-video" ${touch} onclick="wkCardClick('${id}')"><div class="play-btn">▶</div>${label}${nav}</div>`;
   }
   return `<div class="media-box filled-img" ${touch} style="background-image:url('${it.url}')" onclick="wkCardClick('${id}')">${label}${nav}</div>`;
+}
+
+function _wkIsTouch() {
+  return window.matchMedia && matchMedia('(hover: none) and (pointer: coarse)').matches;
+}
+
+// se o <video> nativo falhar (URL do Discord expirada), oferece abrir no Drive
+function wkVideoFail(el, url) {
+  const a = document.createElement('a');
+  a.href = url; a.target = '_blank'; a.rel = 'noopener';
+  a.className = 'wk-lb-fallback';
+  a.textContent = '▶ Abrir o vídeo no Drive';
+  el.replaceWith(a);
 }
 
 // ---- swipe (celular): arrastar pro lado navega; clique só abre se NÃO arrastou ----
@@ -1060,9 +1075,9 @@ function wkLBRender() {
   const n = st.items.length;
   const openUrl = it.driveUrl || it.url;
   const media = it.type === 'video'
-    ? (it.driveId
+    ? (it.driveId && !_wkIsTouch()
         ? `<iframe class="wk-lb-frame" src="https://drive.google.com/file/d/${it.driveId}/preview" allow="autoplay; fullscreen" allowfullscreen></iframe>`
-        : `<video class="wk-lb-media" src="${it.url}" controls autoplay></video>`)
+        : `<video class="wk-lb-media" src="${it.url}" controls autoplay playsinline preload="metadata" onerror="wkVideoFail(this,'${openUrl}')"></video>`)
     : `<img class="wk-lb-media" src="${it.url}" alt="">`;
   ov.innerHTML = `
     <div class="wk-lb-top">
