@@ -985,16 +985,21 @@ function wkMediaHtml(id) {
   // clique amplia no próprio dash (lightbox); o ↗ de lá leva pro Drive.
   // touch: arrastar pro lado troca de mídia (celular)
   const touch = `ontouchstart="wkTouchStart(event)" ontouchend="wkTouchEnd('${id}',event)"`;
+  // thumbnail do Drive: capa dos vídeos e fallback das fotos (funciona anônimo)
+  const thumb = it.driveId ? `https://drive.google.com/thumbnail?id=${it.driveId}&sz=w1000` : null;
   if (it.type === 'video') {
     // O iframe /preview do Drive precisa de cookies de terceiros — celular
-    // bloqueia e dá "não foi possível carregar". Em touch, vira tile ▶ que
-    // abre o lightbox com <video> nativo (URL do Discord, sem cookie).
+    // bloqueia e dá "não foi possível carregar". Em touch vira um tile com a
+    // capa do vídeo; o toque abre no Drive (que toca liso no celular).
     if (it.driveId && !_wkIsTouch()) {
       return `<div class="media-box filled-video" ${touch}><iframe class="wk-frame" src="https://drive.google.com/file/d/${it.driveId}/preview" allow="autoplay; fullscreen" allowfullscreen loading="lazy"></iframe><button class="wk-expand" title="Ampliar" onclick="wkOpenLightbox('${id}')">⛶</button>${label}${nav}</div>`;
     }
-    return `<div class="media-box filled-video" ${touch} onclick="wkCardClick('${id}')"><div class="play-btn">▶</div>${label}${nav}</div>`;
+    const poster = thumb ? ` style="background-image:url('${thumb}');background-size:cover;background-position:center"` : '';
+    return `<div class="media-box filled-video" ${touch}${poster} onclick="wkCardClick('${id}')"><div class="play-btn">▶</div>${label}${nav}</div>`;
   }
-  return `<div class="media-box filled-img" ${touch} style="background-image:url('${it.url}')" onclick="wkCardClick('${id}')">${label}${nav}</div>`;
+  // foto: CDN do Discord na frente; se falhar, a thumbnail do Drive aparece atrás
+  const bg = `url('${it.url}')${thumb ? `, url('${thumb}')` : ''}`;
+  return `<div class="media-box filled-img" ${touch} style="background-image:${bg}" onclick="wkCardClick('${id}')">${label}${nav}</div>`;
 }
 
 function _wkIsTouch() {
@@ -1030,6 +1035,14 @@ function wkTouchEnd(id, e) {
 }
 function wkCardClick(id) {
   if (_wkSwiped) return;  // era um arrasto, não um clique
+  const st = _wkCarousels[id];
+  const it = st && st.items[st.idx];
+  // celular: vídeo abre direto no Drive — o <video> nativo com URL do Discord
+  // se mostrou instável no mobile; o Drive toca liso (site ou app)
+  if (it && it.type === 'video' && _wkIsTouch() && (it.driveUrl || it.driveId)) {
+    window.open(it.driveUrl || `https://drive.google.com/file/d/${it.driveId}/view`, '_blank');
+    return;
+  }
   wkOpenLightbox(id);
 }
 function wkLBTouchEnd(e) {
@@ -1100,11 +1113,20 @@ function wkLBRender() {
   const it = st.items[st.idx];
   const n = st.items.length;
   const openUrl = it.driveUrl || it.url;
-  const media = it.type === 'video'
-    ? (it.driveId && !_wkIsTouch()
-        ? `<iframe class="wk-lb-frame" src="https://drive.google.com/file/d/${it.driveId}/preview" allow="autoplay; fullscreen" allowfullscreen></iframe>`
-        : `<video class="wk-lb-media" src="${it.url}" controls autoplay playsinline preload="metadata" onerror="wkVideoFail(this,'${openUrl}')"></video>`)
-    : `<img class="wk-lb-media" src="${it.url}" alt="">`;
+  const lbThumb = it.driveId ? `https://drive.google.com/thumbnail?id=${it.driveId}&sz=w1600` : null;
+  let media;
+  if (it.type === 'video') {
+    if (it.driveId && !_wkIsTouch()) {
+      media = `<iframe class="wk-lb-frame" src="https://drive.google.com/file/d/${it.driveId}/preview" allow="autoplay; fullscreen" allowfullscreen></iframe>`;
+    } else if (_wkIsTouch() && lbThumb) {
+      // celular: capa do vídeo com ▶ — o toque abre no Drive (toca liso lá)
+      media = `<a class="wk-lb-vidlink" href="${openUrl}" target="_blank" rel="noopener" style="background-image:url('${lbThumb}')"><div class="play-btn">▶</div></a>`;
+    } else {
+      media = `<video class="wk-lb-media" src="${it.url}" controls autoplay playsinline preload="metadata" onerror="wkVideoFail(this,'${openUrl}')"></video>`;
+    }
+  } else {
+    media = `<img class="wk-lb-media" src="${it.url}" alt="">`;
+  }
   ov.innerHTML = `
     <div class="wk-lb-top">
       ${it.label ? `<span class="wk-proj wk-lb-tag" style="color:${colorForTag(it.label.split('/')[0])}">${escapeHtml(it.label)}</span>` : '<span></span>'}

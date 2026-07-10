@@ -425,6 +425,18 @@ h1.page-h {
   letter-spacing: .14em; text-transform: uppercase; margin-bottom: 6px;
 }
 .report-col-label.hl { color: var(--grn); }
+/* celular: os rótulos de dia (ONTEM/HOJE/AMANHÃ) ficavam parecidos com as tags
+   de projeto — aqui viram cabeçalho com seta + linha, claramente outra coisa */
+@media (max-width: 760px) {
+  .report-col-label {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 10px; color: var(--mut);
+    border-bottom: 1px solid var(--line2);
+    padding-bottom: 4px; margin-bottom: 8px;
+  }
+  .report-col-label::before { content: '▸'; color: var(--dim); }
+  .report-col-label.hl { color: var(--grn); border-bottom-color: rgba(126, 211, 33, .25); }
+}
 .hdr-date {
   font-family: var(--font-mono); font-size: 10px; color: var(--mut);
   letter-spacing: .08em; white-space: nowrap;
@@ -606,6 +618,12 @@ h1.page-h {
 }
 .wk-lb-media { max-width: 100%; max-height: 100%; border-radius: 10px; border: 1px solid var(--line2); object-fit: contain; }
 .wk-lb-frame { width: min(1100px, 86vw); aspect-ratio: 16 / 9; max-height: 78vh; border: 0; border-radius: 10px; }
+.wk-lb-vidlink {
+  position: relative; width: min(900px, 84vw); aspect-ratio: 16 / 9;
+  background-size: cover; background-position: center;
+  border-radius: 10px; border: 1px solid var(--line2);
+  display: flex; align-items: center; justify-content: center;
+}
 .wk-lb-fallback {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 14px 22px; border-radius: 10px;
