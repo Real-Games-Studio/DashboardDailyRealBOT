@@ -1052,13 +1052,17 @@ function masonryize(grid) {
     d.className = 'wk-col';
     return d;
   });
+  // IMPORTANTE: tira TODOS os cards do grid antes de montar as colunas — se
+  // ficarem, viram itens da linha flex, espremem as colunas e a altura medida
+  // sai errada (uma coluna "estoura" e o resto vai todo pra outra).
+  cards.forEach(c => c.remove());
   grid.classList.add('masonry');
   cols.forEach(c => grid.appendChild(c));
   const colH = new Array(k).fill(0);
   for (const card of cards) {
     const j = colH.indexOf(Math.min(...colH));
-    cols[j].appendChild(card);           // move o nó (listeners/ids preservados)
-    colH[j] += card.offsetHeight + gap;  // mede já na largura final da coluna
+    cols[j].appendChild(card);  // move o nó (listeners/ids preservados)
+    colH[j] += card.getBoundingClientRect().height + gap;  // mede na largura final da coluna
   }
 }
 
