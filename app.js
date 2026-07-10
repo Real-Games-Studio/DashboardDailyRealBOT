@@ -238,9 +238,11 @@ function tagBadge(tag) {
 function linesHtml(text) {
   const lines = parseLines(text);
   if (!lines.length) return '<span style="color:#5A6273">—</span>';
-  return '<div class="report-lines">' + lines.map(ln =>
-    `<div class="report-line">${(ln.tags || []).map(tagBadge).join('')}<span>${escapeHtml(ln.text)}</span></div>`
-  ).join('') + '</div>';
+  return '<div class="report-lines">' + lines.map(ln => {
+    // tags numa linha própria ACIMA do texto — não espremem o parágrafo pro lado
+    const tags = (ln.tags || []).map(tagBadge).join('');
+    return `<div class="report-line">${tags ? `<div class="rl-tags">${tags}</div>` : ''}<span>${escapeHtml(ln.text)}</span></div>`;
+  }).join('') + '</div>';
 }
 
 // ---- presença unificada: daily conta seg–qui; SEXTA conta pelo WEEKLY da semana.
@@ -931,27 +933,32 @@ function weeklyMediaItems(w) {
   if (entries.length) {
     for (const e of entries) {
       const label = (e.projects || []).join(' · ') || null;
+      // driveLinks tem 1 item por (arquivo × projeto), na ordem dos arquivos:
+      // a cópia do arquivo i (no 1º projeto) fica em driveLinks[i * nproj]
+      const nproj = Math.max(1, (e.projects || []).length);
+      const links = Array.isArray(e.driveLinks) ? e.driveLinks : [];
       const files = Array.isArray(e.files) && e.files.length
         ? e.files
         : [e.imageUrl ? { url: e.imageUrl, type: 'image' } : null,
            e.videoUrl ? { url: e.videoUrl, type: 'video' } : null].filter(Boolean);
-      for (const f of files) {
-        if (!f || !f.url) continue;
+      files.forEach((f, i) => {
+        if (!f || !f.url) return;
         const type = f.type || (/\.(mp4|mov|webm|mkv)(\?|$)/i.test(f.url) ? 'video' : 'image');
-        items.push({ url: f.url, type, label });
-      }
+        const dl = links[i * nproj] || null;
+        items.push({ url: f.url, type, label, driveId: dl ? dl.id : null, driveUrl: dl ? dl.url : null });
+      });
     }
   } else {
     // weeklies antigas (antes dos blocos): 1 print + 1 vídeo no topo
-    if (w.imageUrl) items.push({ url: w.imageUrl, type: 'image', label: null });
-    if (w.videoUrl) items.push({ url: w.videoUrl, type: 'video', label: null });
+    if (w.imageUrl) items.push({ url: w.imageUrl, type: 'image', label: null, driveId: null, driveUrl: null });
+    if (w.videoUrl) items.push({ url: w.videoUrl, type: 'video', label: null, driveId: null, driveUrl: null });
   }
   return items;
 }
 
 function wkMediaHtml(id) {
   const st = _wkCarousels[id];
-  if (!st || !st.items.length) return '<div class="media-box placeholder">📷<span>sem mídia</span></div>';
+  if (!st || !st.items.length) return '';  // sem mídia = sem caixa
   const it = st.items[st.idx];
   const n = st.items.length;
   const nav = n > 1
@@ -962,10 +969,16 @@ function wkMediaHtml(id) {
   const label = it.label
     ? `<span class="wk-proj" style="color:${colorForTag(it.label.split('/')[0])}">${escapeHtml(it.label)}</span>`
     : '';
+  // clique abre o link do Drive (permanente) quando existe; senão o do Discord
+  const openUrl = it.driveUrl || it.url;
   if (it.type === 'video') {
-    return `<div class="media-box filled-video" onclick="window.open('${it.url}','_blank')"><div class="play-btn">▶</div>${label}${nav}</div>`;
+    if (it.driveId) {
+      // player do Drive embutido (toca no próprio card; precisa de acesso à pasta)
+      return `<div class="media-box filled-video"><iframe class="wk-frame" src="https://drive.google.com/file/d/${it.driveId}/preview" allow="autoplay; fullscreen" allowfullscreen loading="lazy"></iframe>${label}${nav}</div>`;
+    }
+    return `<div class="media-box filled-video" onclick="window.open('${openUrl}','_blank')"><div class="play-btn">▶</div>${label}${nav}</div>`;
   }
-  return `<div class="media-box filled-img" style="background-image:url('${it.url}')" onclick="window.open('${it.url}','_blank')">${label}${nav}</div>`;
+  return `<div class="media-box filled-img" style="background-image:url('${it.url}')" onclick="window.open('${openUrl}','_blank')">${label}${nav}</div>`;
 }
 
 function wkNav(id, dir) {
@@ -1010,7 +1023,12 @@ async function initWeekly() {
         const role = u && u.role ? u.role : null;
         const summary = linesHtml(w.summary);
         const cid = String(w._id || (w.userId + '_' + wk)).replace(/[^a-zA-Z0-9_-]/g, '');
-        _wkCarousels[cid] = { idx: 0, items: weeklyMediaItems(w) };
+        const items = weeklyMediaItems(w);
+        let mediaHtml = '';
+        if (items.length) {
+          _wkCarousels[cid] = { idx: 0, items };
+          mediaHtml = `<div class="weekly-media" id="wk-${cid}">${wkMediaHtml(cid)}</div>`;
+        }
         return `
         <div class="weekly-card rg-in">
           <div class="tl-entry-head" style="margin-bottom:12px">
@@ -1021,7 +1039,7 @@ async function initWeekly() {
             </div>
           </div>
           ${summary}
-          <div class="weekly-media" id="wk-${cid}">${wkMediaHtml(cid)}</div>
+          ${mediaHtml}
         </div>`;
       }).join('');
       return `<div class="week-label">${weekRangeLabel(wk)}</div><div class="weekly-grid">${cards}</div>`;
