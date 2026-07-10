@@ -1040,6 +1040,28 @@ function wkLBTouchEnd(e) {
   if (Math.abs(dx) > 40) wkLBNav(dx < 0 ? 1 : -1);
 }
 
+// ---- masonry em ordem: distribui os cards (em sequência) pra coluna mais curta ----
+function masonryize(grid) {
+  const cards = [...grid.children].filter(c => c.classList.contains('weekly-card'));
+  if (!cards.length) return;
+  const gap = 16, minCol = 440;
+  const k = Math.max(1, Math.floor((grid.clientWidth + gap) / (minCol + gap)));
+  if (k <= 1) return;  // uma coluna só (celular): fluxo normal já é a ordem
+  const cols = Array.from({ length: k }, () => {
+    const d = document.createElement('div');
+    d.className = 'wk-col';
+    return d;
+  });
+  grid.classList.add('masonry');
+  cols.forEach(c => grid.appendChild(c));
+  const colH = new Array(k).fill(0);
+  for (const card of cards) {
+    const j = colH.indexOf(Math.min(...colH));
+    cols[j].appendChild(card);           // move o nó (listeners/ids preservados)
+    colH[j] += card.offsetHeight + gap;  // mede já na largura final da coluna
+  }
+}
+
 // ---- lightbox: mídia ampliada no próprio dash, navegável, com ↗ pro Drive ----
 let _wkLB = { id: null };
 
@@ -1178,6 +1200,7 @@ async function initWeekly() {
       }).join('');
       return `<div class="week-label">${weekRangeLabel(wk)}</div><div class="weekly-grid">${cards}</div>`;
     }).join('');
+    document.querySelectorAll('.weekly-grid').forEach(masonryize);
   } catch (err) {
     content.innerHTML = `<div class="empty-state boxed"><div class="icon">⚠️</div><p>Erro ao carregar.<br>${escapeHtml(err.message)}</p></div>`;
   }

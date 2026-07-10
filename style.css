@@ -558,13 +558,15 @@ h1.page-h {
   color: var(--mag); margin: 26px 0 14px;
 }
 .week-label::after { content: ''; flex: 1; height: 1px; background: var(--line); }
-/* masonry: cada card com a altura do próprio conteúdo (card só-texto fica curto) */
-.weekly-grid { columns: 440px; column-gap: 16px; }
+/* masonry EM ORDEM: JS distribui os cards (na ordem) pra coluna mais curta —
+   alturas livres, mas o mais recente segue no topo e a leitura flui certa */
+.weekly-grid { display: flex; flex-direction: column; gap: 16px; }
+.weekly-grid.masonry { flex-direction: row; align-items: flex-start; }
+.weekly-grid .wk-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 .weekly-card {
   background: var(--panel); border: 1px solid var(--line);
   border-radius: 12px; padding: 18px;
   transition: border-color .15s;
-  break-inside: avoid; margin-bottom: 16px;
 }
 .weekly-card:hover { border-color: var(--line-hover); }
 .weekly-media { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 14px; }
