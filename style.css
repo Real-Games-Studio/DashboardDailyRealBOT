@@ -433,6 +433,9 @@ h1.page-h {
 .report-lines { display: flex; flex-direction: column; gap: 5px; }
 .report-line { font-size: .82rem; color: #C9D1D9; line-height: 1.45; }
 .report-line .rl-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 3px; }
+.report-line .rl-text + .rl-text { margin-top: 3px; }
+.rl-link { color: var(--cyan); text-decoration: none; border-bottom: 1px dotted var(--cyan); word-break: break-all; }
+.rl-link:hover { border-bottom-style: solid; }
 .tag-badge {
   font-family: var(--font-mono); font-size: 9px; font-weight: 700;
   padding: 2px 7px; border-radius: 4px; letter-spacing: .04em;

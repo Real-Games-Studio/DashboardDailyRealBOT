@@ -238,10 +238,23 @@ function tagBadge(tag) {
 function linesHtml(text) {
   const lines = parseLines(text);
   if (!lines.length) return '<span style="color:#5A6273">—</span>';
-  return '<div class="report-lines">' + lines.map(ln => {
-    // tags numa linha própria ACIMA do texto — não espremem o parágrafo pro lado
-    const tags = (ln.tags || []).map(tagBadge).join('');
-    return `<div class="report-line">${tags ? `<div class="rl-tags">${tags}</div>` : ''}<span>${escapeHtml(ln.text)}</span></div>`;
+  // agrupa linhas CONSECUTIVAS com as mesmas tags: a etiqueta aparece uma vez
+  // em cima do grupo (senão um bloco de 5 linhas do mesmo projeto repete 5x)
+  const groups = [];
+  for (const ln of lines) {
+    const key = (ln.tags || []).join('|').toUpperCase();
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) last.lines.push(ln.text);
+    else groups.push({ key, tags: ln.tags || [], lines: [ln.text] });
+  }
+  const linkify = t => escapeHtml(t).replace(
+    /(https?:\/\/[^\s<]+)/g,
+    '<a href="$1" target="_blank" rel="noopener" class="rl-link">$1</a>'
+  );
+  return '<div class="report-lines">' + groups.map(g => {
+    const tags = g.tags.map(tagBadge).join('');
+    const body = g.lines.map(t => `<div class="rl-text">${linkify(t)}</div>`).join('');
+    return `<div class="report-line">${tags ? `<div class="rl-tags">${tags}</div>` : ''}${body}</div>`;
   }).join('') + '</div>';
 }
 
