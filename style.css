@@ -565,6 +565,40 @@ h1.page-h {
 .weekly-media { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 14px; }
 /* carrossel de mídias da weekly */
 .wk-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; z-index: 1; }
+.wk-expand {
+  position: absolute; bottom: 6px; left: 8px; z-index: 2;
+  width: 26px; height: 26px; border-radius: 6px;
+  background: rgba(0, 0, 0, .55); border: 1px solid var(--line2); color: var(--txt);
+  cursor: pointer; font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color .15s, color .15s;
+}
+.wk-expand:hover { border-color: var(--cyan); color: var(--cyan); }
+/* lightbox da weekly: mídia ampliada no próprio dash */
+.wk-lightbox {
+  position: fixed; inset: 0; background: rgba(4, 4, 8, .92);
+  z-index: 3000; display: none; flex-direction: column; padding: 16px 20px;
+}
+.wk-lightbox.visible { display: flex; }
+.wk-lb-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.wk-lb-tag { position: static !important; }
+.wk-lb-actions { display: flex; gap: 8px; align-items: center; }
+.wk-lb-btn {
+  width: 34px; height: 34px; border-radius: 8px;
+  background: var(--panel); border: 1px solid var(--line2); color: var(--txt);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; text-decoration: none; font-size: 15px;
+  transition: border-color .15s, color .15s;
+}
+.wk-lb-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+.wk-lb-stage { flex: 1; display: flex; align-items: center; justify-content: center; gap: 14px; min-height: 0; }
+.wk-lb-arrow { position: static !important; transform: none !important; flex-shrink: 0; }
+.wk-lb-holder {
+  max-width: min(1100px, 86vw); width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center; min-width: 0;
+}
+.wk-lb-media { max-width: 100%; max-height: 100%; border-radius: 10px; border: 1px solid var(--line2); object-fit: contain; }
+.wk-lb-frame { width: min(1100px, 86vw); aspect-ratio: 16 / 9; max-height: 78vh; border: 0; border-radius: 10px; }
 .wk-nav {
   position: absolute; top: 50%; transform: translateY(-50%);
   width: 30px; height: 30px; border-radius: 50%;

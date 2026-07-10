@@ -969,16 +969,87 @@ function wkMediaHtml(id) {
   const label = it.label
     ? `<span class="wk-proj" style="color:${colorForTag(it.label.split('/')[0])}">${escapeHtml(it.label)}</span>`
     : '';
-  // clique abre o link do Drive (permanente) quando existe; senão o do Discord
-  const openUrl = it.driveUrl || it.url;
+  // clique amplia no próprio dash (lightbox); o ↗ de lá leva pro Drive
   if (it.type === 'video') {
     if (it.driveId) {
-      // player do Drive embutido (toca no próprio card; precisa de acesso à pasta)
-      return `<div class="media-box filled-video"><iframe class="wk-frame" src="https://drive.google.com/file/d/${it.driveId}/preview" allow="autoplay; fullscreen" allowfullscreen loading="lazy"></iframe>${label}${nav}</div>`;
+      // player do Drive embutido no card; ⛶ amplia no lightbox
+      return `<div class="media-box filled-video"><iframe class="wk-frame" src="https://drive.google.com/file/d/${it.driveId}/preview" allow="autoplay; fullscreen" allowfullscreen loading="lazy"></iframe><button class="wk-expand" title="Ampliar" onclick="wkOpenLightbox('${id}')">⛶</button>${label}${nav}</div>`;
     }
-    return `<div class="media-box filled-video" onclick="window.open('${openUrl}','_blank')"><div class="play-btn">▶</div>${label}${nav}</div>`;
+    return `<div class="media-box filled-video" onclick="wkOpenLightbox('${id}')"><div class="play-btn">▶</div>${label}${nav}</div>`;
   }
-  return `<div class="media-box filled-img" style="background-image:url('${it.url}')" onclick="window.open('${openUrl}','_blank')">${label}${nav}</div>`;
+  return `<div class="media-box filled-img" style="background-image:url('${it.url}')" onclick="wkOpenLightbox('${id}')">${label}${nav}</div>`;
+}
+
+// ---- lightbox: mídia ampliada no próprio dash, navegável, com ↗ pro Drive ----
+let _wkLB = { id: null };
+
+function wkOpenLightbox(id) {
+  const st = _wkCarousels[id];
+  if (!st || !st.items.length) return;
+  _wkLB.id = id;
+  let ov = document.getElementById('wk-lightbox');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'wk-lightbox';
+    ov.className = 'wk-lightbox';
+    ov.addEventListener('click', e => {
+      if (e.target === ov || e.target.classList.contains('wk-lb-stage') || e.target.classList.contains('wk-lb-holder')) wkLBClose();
+    });
+    document.body.appendChild(ov);
+  }
+  document.addEventListener('keydown', _wkLBKeys);
+  wkLBRender();
+}
+
+function _wkLBKeys(e) {
+  if (e.key === 'Escape') wkLBClose();
+  else if (e.key === 'ArrowLeft') wkLBNav(-1);
+  else if (e.key === 'ArrowRight') wkLBNav(1);
+}
+
+function wkLBRender() {
+  const ov = document.getElementById('wk-lightbox');
+  const st = _wkCarousels[_wkLB.id];
+  if (!ov || !st) return;
+  const it = st.items[st.idx];
+  const n = st.items.length;
+  const openUrl = it.driveUrl || it.url;
+  const media = it.type === 'video'
+    ? (it.driveId
+        ? `<iframe class="wk-lb-frame" src="https://drive.google.com/file/d/${it.driveId}/preview" allow="autoplay; fullscreen" allowfullscreen></iframe>`
+        : `<video class="wk-lb-media" src="${it.url}" controls autoplay></video>`)
+    : `<img class="wk-lb-media" src="${it.url}" alt="">`;
+  ov.innerHTML = `
+    <div class="wk-lb-top">
+      ${it.label ? `<span class="wk-proj wk-lb-tag" style="color:${colorForTag(it.label.split('/')[0])}">${escapeHtml(it.label)}</span>` : '<span></span>'}
+      <div class="wk-lb-actions">
+        <span class="wk-count wk-lb-tag">${st.idx + 1}/${n}</span>
+        <a class="wk-lb-btn" href="${openUrl}" target="_blank" rel="noopener" title="Abrir no Drive">↗</a>
+        <button class="wk-lb-btn" onclick="wkLBClose()" title="Fechar (Esc)">✕</button>
+      </div>
+    </div>
+    <div class="wk-lb-stage">
+      ${n > 1 ? `<button class="wk-nav wk-lb-arrow" onclick="wkLBNav(-1)">‹</button>` : '<span></span>'}
+      <div class="wk-lb-holder">${media}</div>
+      ${n > 1 ? `<button class="wk-nav wk-lb-arrow" onclick="wkLBNav(1)">›</button>` : '<span></span>'}
+    </div>`;
+  ov.classList.add('visible');
+}
+
+function wkLBNav(dir) {
+  const st = _wkCarousels[_wkLB.id];
+  if (!st) return;
+  st.idx = (st.idx + dir + st.items.length) % st.items.length;
+  wkLBRender();
+  // o card acompanha o slide do lightbox
+  const box = document.getElementById('wk-' + _wkLB.id);
+  if (box) box.innerHTML = wkMediaHtml(_wkLB.id);
+}
+
+function wkLBClose() {
+  const ov = document.getElementById('wk-lightbox');
+  if (ov) { ov.classList.remove('visible'); ov.innerHTML = ''; }
+  document.removeEventListener('keydown', _wkLBKeys);
 }
 
 function wkNav(id, dir) {
