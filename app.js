@@ -184,9 +184,15 @@ function parseLines(text) {
     .map(l => l.trim().replace(/^[-*]\s+/, '- ').replace(/^- /, ''))
     .map(l => l.trim()).filter(Boolean)
     .map(line => {
-      const m = line.match(/^\[([^\]]+)\]\s*(.*)$/);
-      if (m) return { tag: m[1].trim(), text: m[2] };
-      return { tag: null, text: line };
+      // extrai TODAS as [TAG]s consecutivas do começo (bloco multi-projeto
+      // da weekly escreve [A][B] texto — antes a 2ª tag vazava como texto)
+      const tags = [];
+      let rest = line, m;
+      while ((m = rest.match(/^\[([^\]]+)\]\s*/))) {
+        tags.push(m[1].trim());
+        rest = rest.slice(m[0].length);
+      }
+      return { tag: tags[0] || null, tags, text: rest };
     });
 }
 function extractTags(reports) {
@@ -194,7 +200,7 @@ function extractTags(reports) {
   for (const r of reports) {
     for (const field of [r.yesterday, r.today]) {
       for (const ln of parseLines(field)) {
-        if (ln.tag) counts.set(ln.tag.toUpperCase(), (counts.get(ln.tag.toUpperCase()) || 0) + 1);
+        for (const t of (ln.tags || [])) counts.set(t.toUpperCase(), (counts.get(t.toUpperCase()) || 0) + 1);
       }
     }
   }
@@ -219,7 +225,7 @@ function reportMatchesProject(r, projName) {
   if ((r.projects || []).some(p => normTag(String(p).split('/')[0]) === n)) return true;
   for (const field of [r.yesterday, r.today]) {
     for (const ln of parseLines(field)) {
-      if (ln.tag && normTag(ln.tag).startsWith(n)) return true;
+      if ((ln.tags || []).some(t => normTag(t).startsWith(n))) return true;
     }
   }
   return false;
@@ -233,7 +239,7 @@ function linesHtml(text) {
   const lines = parseLines(text);
   if (!lines.length) return '<span style="color:#5A6273">—</span>';
   return '<div class="report-lines">' + lines.map(ln =>
-    `<div class="report-line">${ln.tag ? tagBadge(ln.tag) : ''}<span>${escapeHtml(ln.text)}</span></div>`
+    `<div class="report-line">${(ln.tags || []).map(tagBadge).join('')}<span>${escapeHtml(ln.text)}</span></div>`
   ).join('') + '</div>';
 }
 
@@ -914,6 +920,62 @@ function selectProject(name) {
 // ==========================================================
 // PÁGINA: WEEKLY
 // ==========================================================
+// ---- carrossel de mídias da weekly ----
+// A weekly agora tem N mídias (blocos por projeto, cada um com seus arquivos).
+// Cada card ganha um slide com setinhas ‹ › + contador + tag do projeto da mídia.
+const _wkCarousels = {};
+
+function weeklyMediaItems(w) {
+  const items = [];
+  const entries = Array.isArray(w.media) ? w.media : [];
+  if (entries.length) {
+    for (const e of entries) {
+      const label = (e.projects || []).join(' · ') || null;
+      const files = Array.isArray(e.files) && e.files.length
+        ? e.files
+        : [e.imageUrl ? { url: e.imageUrl, type: 'image' } : null,
+           e.videoUrl ? { url: e.videoUrl, type: 'video' } : null].filter(Boolean);
+      for (const f of files) {
+        if (!f || !f.url) continue;
+        const type = f.type || (/\.(mp4|mov|webm|mkv)(\?|$)/i.test(f.url) ? 'video' : 'image');
+        items.push({ url: f.url, type, label });
+      }
+    }
+  } else {
+    // weeklies antigas (antes dos blocos): 1 print + 1 vídeo no topo
+    if (w.imageUrl) items.push({ url: w.imageUrl, type: 'image', label: null });
+    if (w.videoUrl) items.push({ url: w.videoUrl, type: 'video', label: null });
+  }
+  return items;
+}
+
+function wkMediaHtml(id) {
+  const st = _wkCarousels[id];
+  if (!st || !st.items.length) return '<div class="media-box placeholder">📷<span>sem mídia</span></div>';
+  const it = st.items[st.idx];
+  const n = st.items.length;
+  const nav = n > 1
+    ? `<button class="wk-nav prev" onclick="event.stopPropagation();wkNav('${id}',-1)">‹</button>` +
+      `<button class="wk-nav next" onclick="event.stopPropagation();wkNav('${id}',1)">›</button>` +
+      `<span class="wk-count">${st.idx + 1}/${n}</span>`
+    : '';
+  const label = it.label
+    ? `<span class="wk-proj" style="color:${colorForTag(it.label.split('/')[0])}">${escapeHtml(it.label)}</span>`
+    : '';
+  if (it.type === 'video') {
+    return `<div class="media-box filled-video" onclick="window.open('${it.url}','_blank')"><div class="play-btn">▶</div>${label}${nav}</div>`;
+  }
+  return `<div class="media-box filled-img" style="background-image:url('${it.url}')" onclick="window.open('${it.url}','_blank')">${label}${nav}</div>`;
+}
+
+function wkNav(id, dir) {
+  const st = _wkCarousels[id];
+  if (!st) return;
+  st.idx = (st.idx + dir + st.items.length) % st.items.length;
+  const box = document.getElementById('wk-' + id);
+  if (box) box.innerHTML = wkMediaHtml(id);
+}
+
 async function initWeekly() {
   mountChrome('weekly.html');
   const content = document.getElementById('content');
@@ -926,7 +988,7 @@ async function initWeekly() {
 
     const banner = `
       <div class="weekly-banner rg-in">
-        📼 <strong>Weekly:</strong> toda sexta às 17h o bot pede um resumo da semana — texto + <strong>print</strong> e opcionalmente <strong>vídeo</strong> (anexos enviados na DM do bot, limite 10MB).
+        📼 <strong>Weekly:</strong> toda sexta às 17h30 o bot pede a semana em <strong>blocos por projeto</strong> — texto + prints/vídeos (na DM, até 25MB por arquivo). A mídia é arquivada no Drive do studio e aparece aqui com setinhas pra navegar.
       </div>`;
 
     if (!weeklies.length) {
@@ -947,12 +1009,8 @@ async function initWeekly() {
         const u = userMap.get(w.userId);
         const role = u && u.role ? u.role : null;
         const summary = linesHtml(w.summary);
-        const img = w.imageUrl
-          ? `<div class="media-box filled-img" style="background-image:url('${w.imageUrl}')" onclick="window.open('${w.imageUrl}','_blank')"></div>`
-          : `<div class="media-box placeholder">📷<span>sem print</span></div>`;
-        const vid = w.videoUrl
-          ? `<div class="media-box filled-video" onclick="window.open('${w.videoUrl}','_blank')"><div class="play-btn">▶</div>${w.videoDuration ? `<span class="media-dur">${escapeHtml(w.videoDuration)}</span>` : ''}</div>`
-          : `<div class="media-box placeholder" style="opacity:.5">🎬<span>sem vídeo</span></div>`;
+        const cid = String(w._id || (w.userId + '_' + wk)).replace(/[^a-zA-Z0-9_-]/g, '');
+        _wkCarousels[cid] = { idx: 0, items: weeklyMediaItems(w) };
         return `
         <div class="weekly-card rg-in">
           <div class="tl-entry-head" style="margin-bottom:12px">
@@ -963,7 +1021,7 @@ async function initWeekly() {
             </div>
           </div>
           ${summary}
-          <div class="weekly-media">${img}${vid}</div>
+          <div class="weekly-media" id="wk-${cid}">${wkMediaHtml(cid)}</div>
         </div>`;
       }).join('');
       return `<div class="week-label">${weekRangeLabel(wk)}</div><div class="weekly-grid">${cards}</div>`;
