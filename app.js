@@ -209,6 +209,11 @@ function extractTags(reports) {
 // ---- projetos canônicos ----
 function normTag(s) { return (s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
 function activeProjects(data) { return (data.projects || []).filter(p => p.active !== false); }
+
+// FILTRO DE PROJETO — desativado por enquanto: com os ~84 apps que passaram a vir da
+// planilha, a barra de filtros virava um mural. Volta na fase 2, hierárquico
+// (projeto macro ▸ app). Pra religar do jeito antigo, basta trocar pra true.
+const MOSTRAR_FILTRO_PROJETO = false;
 function projectPaths(data) {
   const paths = [];
   for (const p of activeProjects(data)) {
@@ -493,8 +498,12 @@ function openDailyModal() {
 }
 
 function modalProjectsForMe(data) {
-  // sem filtro de área — todo mundo mexe nos mesmos projetos, todos veem todos
-  return activeProjects(data).map(p => ({ name: p.name, subs: (p.subs || []).slice() }));
+  // sem filtro de área — todo mundo mexe nos mesmos projetos, todos veem todos.
+  // Exclui os apps sincronizados da planilha (têm appId): eles só entram no fluxo na
+  // fase 2 (hierárquico projeto ▸ app); até lá encheriam o modal com ~84 chips.
+  return activeProjects(data)
+    .filter(p => !p.appId)
+    .map(p => ({ name: p.name, subs: (p.subs || []).slice() }));
 }
 
 let _modalProjOpen = null;  // projeto-pai expandido (accordion: só um aberto por vez)
@@ -679,7 +688,7 @@ function reportsInScope(data) {
   const scopeIds = new Set(usersInScope(data).map(u => u._id));
   let rs = data.reports.filter(r => scopeIds.has(r.userId));
   if (state.member) rs = rs.filter(r => r.userId === state.member);
-  if (state.project) rs = rs.filter(r => reportMatchesProject(r, state.project));
+  if (MOSTRAR_FILTRO_PROJETO && state.project) rs = rs.filter(r => reportMatchesProject(r, state.project));
   return rs;
 }
 
@@ -761,16 +770,19 @@ function renderDashPage(data) {
     </select>`;
   // chips de projeto CANÔNICOS — contagem respeita a pessoa selecionada;
   // com pessoa escolhida, só aparecem os projetos QUE ELA tocou
-  const scopeIds = new Set(scopeUsers.map(u => u._id));
-  const baseReports = data.reports.filter(r =>
-    scopeIds.has(r.userId) && (!state.member || r.userId === state.member));
-  const projChips = activeProjects(data).map(p => {
-    const cnt = baseReports.filter(r => reportMatchesProject(r, p.name)).length;
-    return { p, cnt };
-  }).filter(({ p, cnt }) => !state.member || cnt > 0 || state.project === p.name)
-    .map(({ p, cnt }) =>
-      `<button class="chip ${state.project === p.name ? 'active' : ''}" onclick="selectProject('${escapeHtml(p.name)}')"><span class="sq" style="background:${colorForTag(p.name)}"></span>${escapeHtml(p.name)} <span class="cnt">${cnt}</span></button>`
-    ).join('');
+  let projChips = '';
+  if (MOSTRAR_FILTRO_PROJETO) {
+    const scopeIds = new Set(scopeUsers.map(u => u._id));
+    const baseReports = data.reports.filter(r =>
+      scopeIds.has(r.userId) && (!state.member || r.userId === state.member));
+    projChips = activeProjects(data).map(p => {
+      const cnt = baseReports.filter(r => reportMatchesProject(r, p.name)).length;
+      return { p, cnt };
+    }).filter(({ p, cnt }) => !state.member || cnt > 0 || state.project === p.name)
+      .map(({ p, cnt }) =>
+        `<button class="chip ${state.project === p.name ? 'active' : ''}" onclick="selectProject('${escapeHtml(p.name)}')"><span class="sq" style="background:${colorForTag(p.name)}"></span>${escapeHtml(p.name)} <span class="cnt">${cnt}</span></button>`
+      ).join('');
+  }
   const filtersHtml = `<div class="filters-row rg-in">${roleChips}${memberSelect}${projChips ? '<span class="filters-divider"></span>' + projChips : ''}</div>`;
 
   // ---- perfil ou lista ----
